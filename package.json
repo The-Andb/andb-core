@@ -1,5 +1,5 @@
 {
-  "name": "@the-andb/core-nest",
+  "name": "@the-andb/core",
   "version": "0.0.1",
   "description": "The Andb Core Engine - Rebuilt with NestJS",
   "author": "The Andb (ph4n4n)",
