@@ -1,0 +1,40 @@
+The Andb Public License (APL-1.0)
+Copyright (c) 2026 The Andb. All rights reserved.
+
+TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+1. Definitions.
+   "Licensor" shall mean The Andb, the copyright owner or entity authorized by the copyright owner that is granting the License.
+   "You" (or "Your") shall mean an individual or Legal Entity exercising permissions granted by this License.
+   "Source" form shall mean the preferred form for making modifications, including but not limited to software source code, documentation source, and configuration files.
+   "Work" shall mean the work of authorship, whether in Source or other form, made available under the License.
+
+2. Source Availability & Visibility.
+   This project is "Source-Available". You are permitted to view, download, and clone the Source code for evaluation, educational, and non-commercial testing purposes.
+
+3. Grant of License.
+   Subject to the terms and conditions of this License, Licensor hereby grants You a personal, non-exclusive, non-transferable, and limited license to:
+   (a) Download and install the Work on local machines for personal evaluation.
+   (b) Run the Work internally for non-commercial testing and research.
+   (c) View the Source code for auditing or educational purposes.
+
+4. Restrictions.
+   You may NOT:
+   (a) Use the Work for any commercial purpose, including but not limited to using it in a commercial production environment, facilitating commercial business operations, or supporting revenue-generating activities.
+   (b) Distribute, sub-license, rent, lease, or lend the Work or any derivative works to any third party.
+   (c) host, offer, or provide the Work as a service (SaaS), managed service, or cloud-hosted solution.
+   (d) Remove, alter, or obscure any copyright, trademark, or proprietary rights notices contained in or on the Work.
+   (e) Create public forks of the Work.
+   (f) Use the Work to create a competitive product or service.
+
+5. Commercial Use.
+   Any use of the Work for commercial purposes, production environments, or any use falling outside the scope of Section 3 requires a separate written Commercial License from Licensor.
+   To obtain a Commercial License, please contact: licensing@andb.dev
+
+6. Disclaimer of Warranty.
+   Unless required by applicable law or agreed to in writing, Licensor provides the Work (and each Contributor provides its Contributions) on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are solely responsible for determining the appropriateness of using or redistributing the Work and assume any risks associated with Your exercise of permissions under this License.
+
+7. Limitation of Liability.
+   In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall any Contributor be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this License or out of the use or inability to use the Work.
+
+END OF TERMS

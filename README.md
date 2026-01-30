@@ -80,9 +80,14 @@ We are currently in **Phase 4.5** of our master plan. Our goal is 100% parity wi
 - [x] CLI Parity (`generate`, `helper`)
 - [ ] UI Integration (Phase 5)
 
-## 📄 License
+## 📄 License & Commercial
 
-This project is licensed under the **MIT License**.
+**The Andb Public License (APL-1.0)**
+
+- ✅ **Source-Available**: View, Clone, Run locally for evaluation.
+- ❌ **No Commercial Use**: Production, SaaS, Redistribution are prohibited without a license.
+
+See [LICENSE](../LICENSE) for full terms.
 
 ---
 
