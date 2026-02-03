@@ -3,6 +3,8 @@ import { AppModule } from './app.module';
 
 export * from './common/constants/tokens';
 export * from './core-bridge';
+export { Container } from './core-bridge';
+export { AppModule } from './app.module';
 
 export async function bootstrapCore() {
   const app = await NestFactory.createApplicationContext(AppModule);

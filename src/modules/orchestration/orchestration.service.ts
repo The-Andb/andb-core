@@ -99,37 +99,69 @@ export class OrchestrationService {
 
       if (ddlType === 'tables') {
         for (const name of Object.keys(diff.tables)) {
-          results.push({
+          const ddl = this.migrator.generateAlterSQL(diff.tables[name]);
+          const result = {
             name,
             status: 'different',
             type: 'TABLES',
-            ddl: this.migrator.generateAlterSQL(diff.tables[name]),
+            ddl,
             diff: {
               source: await srcIntro.getTableDDL(dbName, name),
-              target: await destIntro.getTableDDL(destDbName, name)
-            }
+              target: await destIntro.getTableDDL(destDbName, name),
+            },
+          };
+          results.push(result);
+          await this.storageService.saveComparison({
+            srcEnv,
+            destEnv,
+            database: dbName,
+            type: 'TABLES',
+            name,
+            status: result.status,
+            alterStatements: ddl,
           });
         }
         for (const name of diff.droppedTables) {
-          results.push({
+          const ddl = [`DROP TABLE IF EXISTS \`${name}\`;`];
+          const result = {
             name,
             status: 'missing_in_source',
             type: 'TABLES',
-            ddl: [`DROP TABLE IF EXISTS \`${name}\`;`],
-            diff: { source: null, target: await destIntro.getTableDDL(destDbName, name) }
+            ddl,
+            diff: { source: null, target: await destIntro.getTableDDL(destDbName, name) },
+          };
+          results.push(result);
+          await this.storageService.saveComparison({
+            srcEnv,
+            destEnv,
+            database: dbName,
+            type: 'TABLES',
+            name,
+            status: result.status,
+            alterStatements: ddl,
           });
         }
         const srcTables = await srcIntro.listTables(dbName);
         const destTables = await destIntro.listTables(destDbName);
         for (const name of srcTables) {
-          if (!destTables.includes(name)) {
+          if (!destTables.includes(name) && !diff.tables[name]) {
             const ddl = await srcIntro.getTableDDL(dbName, name);
-            results.push({
+            const result = {
               name,
               status: 'missing_in_target',
               type: 'TABLES',
               ddl: [ddl],
-              diff: { source: ddl, target: null }
+              diff: { source: ddl, target: null },
+            };
+            results.push(result);
+            await this.storageService.saveComparison({
+              srcEnv,
+              destEnv,
+              database: dbName,
+              type: 'TABLES',
+              name,
+              status: result.status,
+              alterStatements: [ddl],
             });
           }
         }
@@ -139,15 +171,26 @@ export class OrchestrationService {
           const typeMatch = obj.type.toLowerCase() + 's' === ddlType || (ddlType === 'procedures' && obj.type === 'PROCEDURE');
           if (!typeMatch) continue;
 
-          results.push({
+          const ddl = this.migrator.generateObjectSQL(obj);
+          const result = {
             name: obj.name,
             status: obj.operation === 'DROP' ? 'missing_in_source' : (obj.operation === 'CREATE' ? 'missing_in_target' : 'different'),
             type: obj.type + 'S',
-            ddl: this.migrator.generateObjectSQL(obj),
+            ddl,
             diff: {
               source: obj.operation === 'DROP' ? null : obj.definition,
-              target: obj.operation === 'CREATE' ? null : (await destIntro.getObjectDDL(destDbName, obj.type, obj.name))
-            }
+              target: obj.operation === 'CREATE' ? null : (await destIntro.getObjectDDL(destDbName, obj.type, obj.name)),
+            },
+          };
+          results.push(result);
+          await this.storageService.saveComparison({
+            srcEnv,
+            destEnv,
+            database: dbName,
+            type: obj.type + 'S',
+            name: obj.name,
+            status: result.status,
+            alterStatements: ddl,
           });
         }
       }

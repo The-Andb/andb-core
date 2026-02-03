@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { DriverFactoryService } from '../driver/driver-factory.service';
 import { ProjectConfigService } from '../config/project-config.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ConnectionType } from '../../common/interfaces/connection.interface';
+import { STORAGE_SERVICE } from '../../common/constants/tokens';
 
 @Injectable()
 export class ExporterService {
@@ -12,6 +13,7 @@ export class ExporterService {
   constructor(
     private readonly driverFactory: DriverFactoryService,
     private readonly configService: ProjectConfigService,
+    @Inject(STORAGE_SERVICE) private readonly storageService: any,
   ) { }
 
   async exportSchema(envName: string, specificName?: string) {
@@ -45,8 +47,12 @@ export class ExporterService {
         for (const name of list) {
           const ddl = await this._getDDL(introspection, dbName, type, name);
           if (ddl) {
+            // Save to file
             fs.writeFileSync(path.join(dir, `${name}.sql`), ddl);
             exportedNames.push(name);
+
+            // Save to storage (NEW)
+            await this.storageService.saveDDL(envName, dbName, pluralType, name, ddl);
           }
         }
 

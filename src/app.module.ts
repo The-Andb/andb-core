@@ -14,6 +14,8 @@ import { ReporterModule } from './modules/reporter/reporter.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { OrchestrationModule } from './modules/orchestration/orchestration.module';
 
+import { InitCommand } from './cli/commands/init.command';
+
 @Module({
   imports: [
     ParserModule,
@@ -33,6 +35,7 @@ import { OrchestrationModule } from './modules/orchestration/orchestration.modul
     ExportCommand,
     CompareCommand,
     MigrateCommand,
+    InitCommand,
   ],
 })
 export class AppModule { }

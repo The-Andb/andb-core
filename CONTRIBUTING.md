@@ -20,7 +20,7 @@ Please use the GitHub Issues tab to report problems.
 
 If you are interested in contributing code to the project (e.g., as a partner or contracted developer), you must sign a **Contributor License Agreement (CLA)** granting The Andb full rights to your contributions.
 
-Please contact `licensing@andb.dev` for more information.
+Please contact `ph4n4n@gmail.com` for more information.
 
 ## 📜 License
 
