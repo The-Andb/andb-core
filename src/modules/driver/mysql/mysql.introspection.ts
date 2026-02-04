@@ -9,7 +9,7 @@ export class MysqlIntrospectionService implements IIntrospectionService {
   constructor(
     private readonly driver: IDatabaseDriver,
     private readonly parser: ParserService,
-  ) {}
+  ) { }
 
   async listTables(_dbName: string): Promise<string[]> {
     const results = await this.driver.query<RowDataPacket[]>('SHOW TABLES');
@@ -141,5 +141,15 @@ export class MysqlIntrospectionService implements IIntrospectionService {
       map[r.TABLE_NAME] = `${r.CHECKSUM || ''}|${r.UPDATE_TIME || ''}`;
     }
     return map;
+  }
+
+  async getObjectDDL(dbName: string, type: string, name: string): Promise<string> {
+    const t = type.toUpperCase();
+    if (t === 'VIEW') return this.getViewDDL(dbName, name);
+    if (t === 'PROCEDURE') return this.getProcedureDDL(dbName, name);
+    if (t === 'FUNCTION') return this.getFunctionDDL(dbName, name);
+    if (t === 'TRIGGER') return this.getTriggerDDL(dbName, name);
+    if (t === 'EVENT') return this.getEventDDL(dbName, name);
+    return '';
   }
 }

@@ -98,4 +98,46 @@ export class MysqlDriver implements IDatabaseDriver {
     const value = enabled ? 1 : 0;
     await this.query(`SET FOREIGN_KEY_CHECKS = ${value};`);
   }
+
+  async generateUserSetupScript(params: {
+    username: string;
+    password?: string;
+    database?: string;
+    host?: string;
+    permissions: any;
+  }): Promise<string> {
+    const { username, password, database, host = '%', permissions } = params;
+    const db = database || 'default';
+
+    // Safety check for quotes to prevent basic injection in generated script review
+    const safeUser = username.replace(/'/g, "");
+    const safePass = (password || "").replace(/'/g, "");
+    const safeHost = host.replace(/'/g, "");
+    const safeDb = db.replace(/`/g, "");
+
+    let sql = `-- Base: Create user and basic metadata access\n`;
+    sql += `CREATE USER IF NOT EXISTS '${safeUser}'@'${safeHost}' IDENTIFIED BY '${safePass}';\n`;
+    sql += `ALTER USER '${safeUser}'@'${safeHost}' IDENTIFIED BY '${safePass}';\n\n`;
+
+    sql += `-- READ Permissions (Required)\n`;
+    sql += `GRANT SELECT, SHOW VIEW ON \`${safeDb}\`.* TO '${safeUser}'@'${safeHost}';\n\n`;
+
+    if (permissions.writeAlter) {
+      sql += `-- Group: WRITE - DDL Operations\n`;
+      sql += `GRANT ALTER, CREATE, DROP, INDEX, REFERENCES ON \`${safeDb}\`.* TO '${safeUser}'@'${safeHost}';\n\n`;
+    }
+
+    if (permissions.writeView) {
+      sql += `-- Group: WRITE - View Operations\n`;
+      sql += `GRANT CREATE VIEW ON \`${safeDb}\`.* TO '${safeUser}'@'${safeHost}';\n\n`;
+    }
+
+    if (permissions.writeRoutine) {
+      sql += `-- Group: WRITE - Routine Operations\n`;
+      sql += `GRANT ALTER ROUTINE, CREATE ROUTINE, EXECUTE ON \`${safeDb}\`.* TO '${safeUser}'@'${safeHost}';\n\n`;
+    }
+
+    sql += `FLUSH PRIVILEGES;`;
+    return sql;
+  }
 }

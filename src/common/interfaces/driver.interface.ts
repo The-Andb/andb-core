@@ -49,6 +49,18 @@ export interface IDatabaseDriver {
    * @param enabled
    */
   setForeignKeyChecks(enabled: boolean): Promise<void>;
+
+  /**
+   * Generate SQL script for setting up a restricted user
+   * @param params User setup parameters
+   */
+  generateUserSetupScript(params: {
+    username: string;
+    password?: string;
+    database?: string;
+    host?: string;
+    permissions: any;
+  }): Promise<string>;
 }
 
 export interface IIntrospectionService {
@@ -67,6 +79,7 @@ export interface IIntrospectionService {
   getEventDDL(dbName: string, eventName: string): Promise<string>;
 
   getChecksums(dbName: string): Promise<Record<string, string>>;
+  getObjectDDL(dbName: string, type: string, name: string): Promise<string>;
 }
 
 export interface IMonitoringService {

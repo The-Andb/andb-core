@@ -117,4 +117,59 @@ describe('OrchestrationService', () => {
       expect(mockDriver.disconnect).toHaveBeenCalled();
     });
   });
+
+  describe('compareSchema', () => {
+    it('should return identical tables with status equal', async () => {
+      // Mock Drivers
+      const mockIntro = {
+        listTables: jest.fn(),
+        getTableDDL: jest.fn(),
+        listProcedures: jest.fn().mockResolvedValue([]),
+        listFunctions: jest.fn().mockResolvedValue([]),
+        listViews: jest.fn().mockResolvedValue([]),
+        listTriggers: jest.fn().mockResolvedValue([]),
+        listEvents: jest.fn().mockResolvedValue([]),
+      };
+      const mockDriver = {
+        connect: jest.fn(),
+        disconnect: jest.fn(),
+        getIntrospectionService: jest.fn().mockReturnValue(mockIntro),
+      };
+      driverFactory.create.mockResolvedValue(mockDriver);
+
+      // Mock Config
+      configService.getConnection.mockReturnValue({ type: 'mysql', config: {} });
+
+      // Mock Comparator (Returns EMPTY diff)
+      comparator.compareSchema.mockResolvedValue({
+        tables: {},
+        droppedTables: [],
+        objects: [],
+        summary: { totalChanges: 0, tablesChanged: 0, objectsChanged: 0 }
+      });
+
+      // Mock Introspection (Identical tables exist)
+      mockIntro.listTables.mockResolvedValue(['users']);
+      mockIntro.getTableDDL.mockResolvedValue('CREATE TABLE users ...');
+
+      // Mock Storage
+      storageService.saveComparison = jest.fn();
+
+      const payload = {
+        srcEnv: 'DEV',
+        destEnv: 'STAGE',
+        type: 'tables'
+      };
+
+      const result = await service.execute('compare', payload);
+
+      // Assertions covering the "Big Missing" bug
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(expect.objectContaining({
+        name: 'users',
+        status: 'equal',
+        type: 'TABLES'
+      }));
+    });
+  });
 });

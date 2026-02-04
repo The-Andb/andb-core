@@ -99,6 +99,10 @@ export class DumpDriver implements IDatabaseDriver {
     // No-op
   }
 
+  async generateUserSetupScript(_params: any): Promise<string> {
+    throw new Error('User setup script generation is not supported for offline dump connections.');
+  }
+
   /**
    * Stateful dump parser (Ported from Legacy DumpDriver.js)
    */
