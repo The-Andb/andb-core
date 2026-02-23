@@ -26,7 +26,7 @@ export class DumpDriver implements IDatabaseDriver {
   constructor(
     private readonly config: IDatabaseConfig,
     private readonly parserService: ParserService,
-  ) { }
+  ) {}
 
   async connect(): Promise<void> {
     // DumpPath is usually passed via host or a specific field if we extended the interface

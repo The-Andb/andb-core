@@ -12,7 +12,7 @@ import { IIntrospectionService } from '../../common/interfaces/driver.interface'
 export class ComparatorService {
   private readonly logger = new Logger(ComparatorService.name);
 
-  constructor(private readonly parser: ParserService) { }
+  constructor(private readonly parser: ParserService) {}
 
   /**
    * Compare two CREATE TABLE statements and return differences
@@ -63,6 +63,12 @@ export class ComparatorService {
       operations.push({ ...op, tableName });
     });
 
+    // 3. Compare Foreign Keys
+    const fkOps = this.compareForeignKeys(srcTable, destTable);
+    fkOps.forEach((op) => {
+      operations.push({ ...op, tableName });
+    });
+
     return {
       tableName,
       operations,
@@ -84,7 +90,10 @@ export class ComparatorService {
     // 2. Clear MySQL Version Comments
     processed = processed.replace(/\/\*!\d+\s*([^/]+)\*\//g, '$1');
 
-    // 3. Normalize spacing and casing
+    // 3. Remove default index algorithms like USING BTREE added implicitly by MySQL
+    processed = processed.replace(/ USING BTREE/ig, '');
+
+    // 4. Normalize spacing and casing
     processed = processed.toUpperCase().replace(/\s+/g, ' ').trim();
 
     return processed;
@@ -175,6 +184,41 @@ export class ComparatorService {
     return ops;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private compareForeignKeys(srcTable: any, destTable: any): IDiffOperation[] {
+    const ops: IDiffOperation[] = [];
+
+    // 1. Check for new or changed foreign keys
+    for (const fkName in srcTable.foreignKeys) {
+      const srcDef = srcTable.foreignKeys[fkName].replace(/,$/, '').trim();
+
+      if (!destTable.foreignKeys[fkName]) {
+        // ADD
+        ops.push({ type: 'ADD', target: 'FOREIGN_KEY', name: fkName, definition: srcDef });
+      } else {
+        // COMPARE
+        const destDef = destTable.foreignKeys[fkName].replace(/,$/, '').trim();
+        const normSrc = this._normalizeDef(srcDef);
+        const normDest = this._normalizeDef(destDef);
+
+        if (normSrc !== normDest) {
+          // DROP + ADD
+          ops.push({ type: 'DROP', target: 'FOREIGN_KEY', name: fkName });
+          ops.push({ type: 'ADD', target: 'FOREIGN_KEY', name: fkName, definition: srcDef });
+        }
+      }
+    }
+
+    // 2. Check for deprecated foreign keys
+    for (const fkName in destTable.foreignKeys) {
+      if (!srcTable.foreignKeys[fkName]) {
+        ops.push({ type: 'DROP', target: 'FOREIGN_KEY', name: fkName });
+      }
+    }
+
+    return ops;
+  }
+
   /**
    * Compare generic DDL objects (Views, Procedures, Functions, Events)
    */
@@ -230,7 +274,7 @@ export class ComparatorService {
       srcTrigger.event !== destTrigger.event ||
       srcTrigger.tableName !== destTrigger.tableName ||
       this.parser.normalize(srcDDL, { ignoreDefiner: true, ignoreWhitespace: true }) !==
-      this.parser.normalize(destDDL, { ignoreDefiner: true, ignoreWhitespace: true });
+        this.parser.normalize(destDDL, { ignoreDefiner: true, ignoreWhitespace: true });
 
     if (hasChanges) {
       return { type: 'TRIGGER', name, operation: 'REPLACE', definition: srcDDL };

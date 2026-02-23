@@ -12,4 +12,4 @@ import { REPORTER_SERVICE } from '../../common/constants/tokens';
   ],
   exports: [ReporterService, REPORTER_SERVICE],
 })
-export class ReporterModule { }
+export class ReporterModule {}

@@ -14,4 +14,4 @@ import { COMPARATOR_SERVICE } from '../../common/constants/tokens';
   ],
   exports: [ComparatorService, COMPARATOR_SERVICE],
 })
-export class ComparatorModule { }
+export class ComparatorModule {}

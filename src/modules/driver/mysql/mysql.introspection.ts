@@ -9,7 +9,7 @@ export class MysqlIntrospectionService implements IIntrospectionService {
   constructor(
     private readonly driver: IDatabaseDriver,
     private readonly parser: ParserService,
-  ) { }
+  ) {}
 
   async listTables(_dbName: string): Promise<string[]> {
     const results = await this.driver.query<RowDataPacket[]>('SHOW TABLES');

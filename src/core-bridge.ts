@@ -6,7 +6,7 @@ import {
   EXPORTER_SERVICE,
   COMPARATOR_SERVICE,
   MIGRATOR_SERVICE,
-  PROJECT_CONFIG_SERVICE
+  PROJECT_CONFIG_SERVICE,
 } from './common/constants/tokens';
 
 export class CoreBridge {
@@ -50,10 +50,18 @@ export class CoreBridge {
   /**
    * Direct service access
    */
-  public static getApp() { return this.app; }
-  public static getOrchestrator() { return this.orchestrator; }
-  public static getStorage() { return this.storage; }
-  public static getConfig() { return this.config; }
+  public static getApp() {
+    return this.app;
+  }
+  public static getOrchestrator() {
+    return this.orchestrator;
+  }
+  public static getStorage() {
+    return this.storage;
+  }
+  public static getConfig() {
+    return this.config;
+  }
 
   /**
    * Execute an operation via Orchestrator
@@ -101,18 +109,20 @@ export class Container {
         const srcEnv = config.getSourceEnv ? config.getSourceEnv(destEnv) : 'DEV'; // Fallback logic
         return await CoreBridge.execute('compare', { srcEnv, destEnv, type, name });
       },
-      migrator: (type: string, status: string, name: string) => async (destEnv: string, options: any) => {
-        const config = CoreBridge.getConfig();
-        const srcEnv = options.sourceEnv || (config.getSourceEnv ? config.getSourceEnv(destEnv) : 'DEV');
-        return await CoreBridge.execute('migrate', {
-          srcEnv,
-          destEnv,
-          type,
-          name,
-          status,
-          ...options
-        });
-      }
+      migrator:
+        (type: string, status: string, name: string) => async (destEnv: string, options: any) => {
+          const config = CoreBridge.getConfig();
+          const srcEnv =
+            options.sourceEnv || (config.getSourceEnv ? config.getSourceEnv(destEnv) : 'DEV');
+          return await CoreBridge.execute('migrate', {
+            srcEnv,
+            destEnv,
+            type,
+            name,
+            status,
+            ...options,
+          });
+        },
     };
   }
 }

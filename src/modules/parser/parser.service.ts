@@ -340,6 +340,7 @@ export class ParserService {
     columns: Record<string, string>;
     primaryKey: string[];
     indexes: Record<string, string>;
+    foreignKeys: Record<string, string>;
   } | null {
     try {
       const lines = tableSQL.split('\n');
@@ -354,6 +355,7 @@ export class ParserService {
       const columnDefs: { name: string; definition: string }[] = [];
       const primaryKey: string[] = [];
       const indexes: Record<string, string> = {};
+      const foreignKeys: Record<string, string> = {};
       let insideColumnDefinitions = false;
       let insideIndexDefinitions = false;
 
@@ -370,17 +372,27 @@ export class ParserService {
         } else if (
           line.includes('PRIMARY KEY') ||
           line.includes('UNIQUE KEY') ||
+          line.includes('CONSTRAINT') ||
           (line.trim().startsWith('KEY') && line.includes('`'))
         ) {
           insideIndexDefinitions = true;
-          const indexNameMatch = line.match(/`([^`]+)`/);
-          if (indexNameMatch && indexNameMatch.length >= 2) {
-            const indexName = indexNameMatch[1];
-            if (line.includes('PRIMARY KEY')) {
-              // PK doesn't necessarily have a name in MySQL DDL usually, but if referenced by name
-              primaryKey.push(indexName);
-            } else {
-              indexes[indexName] = line.trim();
+          if (line.includes('CONSTRAINT')) {
+            const constraintNameMatch = line.match(/CONSTRAINT\s+`([^`]+)`/);
+            if (constraintNameMatch && constraintNameMatch.length >= 2) {
+              // Usually the trailing comma needs to be trimmed, but for now we just trim whitespace
+              // The logic further down or here expects line.trim()
+              foreignKeys[constraintNameMatch[1]] = line.trim();
+            }
+          } else {
+            const indexNameMatch = line.match(/`([^`]+)`/);
+            if (indexNameMatch && indexNameMatch.length >= 2) {
+              const indexName = indexNameMatch[1];
+              if (line.includes('PRIMARY KEY')) {
+                // PK doesn't necessarily have a name in MySQL DDL usually, but if referenced by name
+                primaryKey.push(indexName);
+              } else {
+                indexes[indexName] = line.trim();
+              }
             }
           }
         } else if (insideColumnDefinitions && line.trim() !== '') {
@@ -409,6 +421,7 @@ export class ParserService {
         columns,
         primaryKey,
         indexes,
+        foreignKeys,
       };
     } catch (error) {
       // Silent fail or log? Core shouldn't log by default, maybe throw?

@@ -5,8 +5,9 @@ import {
   DRIVER_FACTORY_SERVICE,
   COMPARATOR_SERVICE,
   EXPORTER_SERVICE,
-  MIGRATOR_SERVICE
+  MIGRATOR_SERVICE,
 } from '../../common/constants/tokens';
+import * as fs from 'fs';
 
 @Injectable()
 export class OrchestrationService {
@@ -17,20 +18,28 @@ export class OrchestrationService {
     @Inject(COMPARATOR_SERVICE) private comparator: any,
     @Inject(EXPORTER_SERVICE) private exporter: any,
     @Inject(MIGRATOR_SERVICE) private migrator: any,
-  ) { }
+  ) {}
 
   async execute(operation: string, payload: any) {
     // Synchronize Config Service with Payload if provided
     if (payload.sourceConfig && payload.srcEnv) {
-      this.configService.setConnection(payload.srcEnv, payload.sourceConfig, payload.sourceConfig.type);
+      this.configService.setConnection(
+        payload.srcEnv,
+        payload.sourceConfig,
+        payload.sourceConfig.type,
+      );
     }
     if (payload.targetConfig && payload.destEnv) {
-      this.configService.setConnection(payload.destEnv, payload.targetConfig, payload.targetConfig.type);
+      this.configService.setConnection(
+        payload.destEnv,
+        payload.targetConfig,
+        payload.targetConfig.type,
+      );
     }
     if (payload.domainNormalization) {
       this.configService.setDomainNormalization(
         new RegExp(payload.domainNormalization.pattern),
-        payload.domainNormalization.replacement
+        payload.domainNormalization.replacement,
       );
     }
 
@@ -63,7 +72,7 @@ export class OrchestrationService {
     const results = {
       baseConn: 'fail',
       schemaRead: 'fail',
-      sandboxTest: 'fail'
+      sandboxTest: 'fail',
     };
 
     try {
@@ -111,15 +120,21 @@ export class OrchestrationService {
     try {
       await driver.connect();
       const intro = driver.getIntrospectionService();
-      const dbName = (connection.database || connection.name) || 'default';
+      const dbName = connection.database || connection.name || 'default';
 
       switch (type.toLowerCase()) {
-        case 'tables': return await intro.listTables(dbName);
-        case 'views': return await intro.listViews(dbName);
-        case 'procedures': return await intro.listProcedures(dbName);
-        case 'functions': return await intro.listFunctions(dbName);
-        case 'triggers': return await intro.listTriggers(dbName);
-        default: return [];
+        case 'tables':
+          return await intro.listTables(dbName);
+        case 'views':
+          return await intro.listViews(dbName);
+        case 'procedures':
+          return await intro.listProcedures(dbName);
+        case 'functions':
+          return await intro.listFunctions(dbName);
+        case 'triggers':
+          return await intro.listTriggers(dbName);
+        default:
+          return [];
       }
     } finally {
       await driver.disconnect();
@@ -226,7 +241,7 @@ export class OrchestrationService {
               status: 'equal',
               type: 'TABLES',
               ddl: [],
-              diff: { source: ddl, target: ddl } // Identical
+              diff: { source: ddl, target: ddl }, // Identical
             };
             results.push(result);
             await this.storageService.saveComparison({
@@ -236,7 +251,7 @@ export class OrchestrationService {
               type: 'TABLES',
               name,
               status: 'equal',
-              alterStatements: []
+              alterStatements: [],
             });
           }
         }
@@ -246,7 +261,9 @@ export class OrchestrationService {
         const processedNames = new Set<string>();
 
         for (const obj of diff.objects) {
-          const typeMatch = obj.type.toLowerCase() + 's' === ddlType || (ddlType === 'procedures' && obj.type === 'PROCEDURE');
+          const typeMatch =
+            obj.type.toLowerCase() + 's' === ddlType ||
+            (ddlType === 'procedures' && obj.type === 'PROCEDURE');
           if (!typeMatch) continue;
 
           processedNames.add(obj.name);
@@ -254,12 +271,20 @@ export class OrchestrationService {
           const ddl = this.migrator.generateObjectSQL(obj);
           const result = {
             name: obj.name,
-            status: obj.operation === 'DROP' ? 'missing_in_source' : (obj.operation === 'CREATE' ? 'missing_in_target' : 'different'),
+            status:
+              obj.operation === 'DROP'
+                ? 'missing_in_source'
+                : obj.operation === 'CREATE'
+                  ? 'missing_in_target'
+                  : 'different',
             type: obj.type + 'S',
             ddl,
             diff: {
               source: obj.operation === 'DROP' ? null : obj.definition,
-              target: obj.operation === 'CREATE' ? null : (await destIntro.getObjectDDL(destDbName, obj.type, obj.name)),
+              target:
+                obj.operation === 'CREATE'
+                  ? null
+                  : await destIntro.getObjectDDL(destDbName, obj.type, obj.name),
             },
           };
           results.push(result);
@@ -306,7 +331,7 @@ export class OrchestrationService {
               status: 'equal',
               type: listType + 'S',
               ddl: [],
-              diff: { source: ddl, target: ddl }
+              diff: { source: ddl, target: ddl },
             };
             results.push(result);
             await this.storageService.saveComparison({
@@ -316,7 +341,7 @@ export class OrchestrationService {
               type: listType + 'S',
               name,
               status: 'equal',
-              alterStatements: []
+              alterStatements: [],
             });
           }
         }
@@ -349,10 +374,25 @@ export class OrchestrationService {
             await destDriver.query(obj.ddl);
           }
           successful.push(obj);
-          await this.storageService.saveMigration(destEnv, destConn.config.database || 'default', obj.type, obj.name, obj.status, 'SUCCESS');
+          await this.storageService.saveMigration(
+            destEnv,
+            destConn.config.database || 'default',
+            obj.type,
+            obj.name,
+            obj.status,
+            'SUCCESS',
+          );
         } catch (err: any) {
           failed.push({ ...obj, error: err.message });
-          await this.storageService.saveMigration(destEnv, destConn.config.database || 'default', obj.type, obj.name, obj.status, 'FAILED', err.message);
+          await this.storageService.saveMigration(
+            destEnv,
+            destConn.config.database || 'default',
+            obj.type,
+            obj.name,
+            obj.status,
+            'FAILED',
+            err.message,
+          );
         }
       }
       return { success: true, successful, failed };
@@ -370,7 +410,10 @@ export class OrchestrationService {
 
       const statements = Array.isArray(script)
         ? script
-        : script.split(';').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+        : script
+            .split(';')
+            .map((s: string) => s.trim())
+            .filter((s: string) => s.length > 0);
 
       for (const stmt of statements) {
         if (!stmt) continue;
@@ -397,7 +440,9 @@ export class OrchestrationService {
 
     // Check if driver supports this
     if (typeof (driver as any).generateUserSetupScript !== 'function') {
-      throw new Error(`Driver for ${adminConnection.type || 'unknown'} does not support user setup generation.`);
+      throw new Error(
+        `Driver for ${adminConnection.type || 'unknown'} does not support user setup generation.`,
+      );
     }
 
     try {
@@ -406,7 +451,7 @@ export class OrchestrationService {
         password: restrictedUser.password || '',
         database: adminConnection.database || adminConnection.name || 'default',
         host: '%', // Default
-        permissions
+        permissions,
       });
     } catch (err: any) {
       throw new Error(`Driver failed to generate script: ${err.message}`);
@@ -414,14 +459,40 @@ export class OrchestrationService {
   }
 
   private async getDriverFromConnection(connection: any) {
+    let sshConfig: any = undefined;
+    const rawSsh = connection.sshConfig || connection.ssh;
+
+    if (rawSsh && (rawSsh.enabled === undefined || rawSsh.enabled === true)) {
+      sshConfig = {
+        host: rawSsh.host,
+        port: rawSsh.port,
+        username: rawSsh.username,
+        password: rawSsh.password,
+        passphrase: rawSsh.passphrase,
+      };
+
+      if (rawSsh.privateKeyPath && !rawSsh.privateKey) {
+        try {
+          sshConfig.privateKey = fs.readFileSync(rawSsh.privateKeyPath, 'utf8');
+        } catch (e: any) {
+          // Type assertion for error
+          console.warn(`Failed to read SSH Key: ${e.message}`);
+        }
+      } else if (rawSsh.privateKey) {
+        sshConfig.privateKey = rawSsh.privateKey;
+      }
+    }
+
     const config = {
       host: connection.host,
       port: connection.port,
       database: connection.database || connection.name,
       user: connection.username,
       password: connection.password || '',
+      sshConfig,
     };
-    const connType = (connection as any).type === 'dump' || connection.host === 'file' ? 'dump' : 'mysql';
+    const connType =
+      (connection as any).type === 'dump' || connection.host === 'file' ? 'dump' : 'mysql';
     return await this.driverFactory.create(connType, config);
   }
 
@@ -432,7 +503,8 @@ export class OrchestrationService {
       await driver.connect();
 
       // For real DBs, verify with a simple query
-      const connType = (connection as any).type === 'dump' || connection.host === 'file' ? 'dump' : 'mysql';
+      const connType =
+        (connection as any).type === 'dump' || connection.host === 'file' ? 'dump' : 'mysql';
       if (connType !== 'dump') {
         await driver.query('SELECT 1');
       }

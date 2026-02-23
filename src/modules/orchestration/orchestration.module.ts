@@ -27,4 +27,4 @@ import { StorageModule } from '../storage/storage.module';
   ],
   exports: [ANDB_ORCHESTRATOR],
 })
-export class OrchestrationModule { }
+export class OrchestrationModule {}

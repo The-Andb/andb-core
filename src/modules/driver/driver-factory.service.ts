@@ -7,7 +7,7 @@ import { ParserService } from '../parser/parser.service';
 
 @Injectable()
 export class DriverFactoryService {
-  constructor(private readonly parser: ParserService) { }
+  constructor(private readonly parser: ParserService) {}
 
   async create(type: ConnectionType, config: IDatabaseConfig): Promise<IDatabaseDriver> {
     if (type === 'mysql' || type === 'mariadb') {

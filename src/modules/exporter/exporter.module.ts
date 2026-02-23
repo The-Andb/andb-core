@@ -15,4 +15,4 @@ import { EXPORTER_SERVICE } from '../../common/constants/tokens';
   ],
   exports: [ExporterService, EXPORTER_SERVICE],
 })
-export class ExporterModule { }
+export class ExporterModule {}

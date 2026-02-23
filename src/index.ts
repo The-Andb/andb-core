@@ -25,3 +25,7 @@ export * from './modules/exporter/exporter.service';
 export * from './modules/exporter/exporter.module';
 export * from './modules/reporter/reporter.service';
 export * from './modules/reporter/reporter.module';
+export * from './modules/parser/parser.service';
+export * from './modules/parser/parser.module';
+export * from './modules/orchestration/orchestration.module';
+export * from './modules/orchestration/orchestration.service';

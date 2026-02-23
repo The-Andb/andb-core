@@ -14,7 +14,7 @@ export class ExporterService {
     private readonly driverFactory: DriverFactoryService,
     private readonly configService: ProjectConfigService,
     @Inject(STORAGE_SERVICE) private readonly storageService: any,
-  ) { }
+  ) {}
 
   async exportSchema(envName: string, specificName?: string) {
     const connection = this.configService.getConnection(envName);

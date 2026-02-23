@@ -4,14 +4,17 @@ import {
   IIntrospectionService,
   IMonitoringService,
 } from '../../../common/interfaces/driver.interface';
+import { ISshConfig } from '../../../common/interfaces/connection.interface';
 import { MysqlIntrospectionService } from './mysql.introspection';
 import { MysqlMonitoringService } from './mysql.monitoring';
+import { SshTunnel } from '../ssh-tunnel';
 import * as mysql from 'mysql2/promise'; // Use promise wrapper natively
 import { Logger } from '@nestjs/common';
 import { ParserService } from '../../parser/parser.service'; // We need this for Introspection
 
 export class MysqlDriver implements IDatabaseDriver {
   private connection: mysql.Connection | null = null;
+  private sshTunnel: SshTunnel | null = null;
   private readonly logger = new Logger(MysqlDriver.name);
 
   // Cache services
@@ -25,6 +28,21 @@ export class MysqlDriver implements IDatabaseDriver {
 
   async connect(): Promise<void> {
     try {
+      let stream: NodeJS.ReadWriteStream | undefined;
+
+      // Handle SSH Tunneling
+      if (this.config.sshConfig) {
+        this.logger.log(`Initializing SSH Tunnel to ${this.config.sshConfig.host}...`);
+        this.sshTunnel = new SshTunnel(this.config.sshConfig as ISshConfig);
+
+        // Connect SSH and forward to DB host/port
+        // Note: this.config.host is the DB host relative to the SSH server
+        stream = await this.sshTunnel.forward(
+          this.config.host || 'localhost',
+          this.config.port || 3306,
+        );
+      }
+
       this.connection = await mysql.createConnection({
         host: this.config.host === 'localhost' ? '127.0.0.1' : this.config.host,
         port: this.config.port || 3306,
@@ -32,6 +50,7 @@ export class MysqlDriver implements IDatabaseDriver {
         password: this.config.password,
         database: this.config.database,
         multipleStatements: true,
+        stream: stream as any, // Inject the SSH stream if available
       });
 
       // Session hygiene
@@ -40,11 +59,20 @@ export class MysqlDriver implements IDatabaseDriver {
       );
       await this.connection.query("SET NAMES 'utf8mb4'");
 
-      this.logger.log(`Connected to MySQL at ${this.config.host}`);
+      this.logger.log(
+        `Connected to MySQL at ${this.config.host} ${this.sshTunnel ? '(via SSH)' : ''}`,
+      );
     } catch (err: unknown) {
       // Cast to Error to access message safely
       const error = err as Error;
       this.logger.error(`MySQL Connection Failed: ${error.message}`);
+
+      // Cleanup SSH if DB connection failed
+      if (this.sshTunnel) {
+        this.sshTunnel.close();
+        this.sshTunnel = null;
+      }
+
       throw error;
     }
   }
@@ -53,6 +81,10 @@ export class MysqlDriver implements IDatabaseDriver {
     if (this.connection) {
       await this.connection.end();
       this.connection = null;
+    }
+    if (this.sshTunnel) {
+      this.sshTunnel.close();
+      this.sshTunnel = null;
     }
   }
 
@@ -110,10 +142,10 @@ export class MysqlDriver implements IDatabaseDriver {
     const db = database || 'default';
 
     // Safety check for quotes to prevent basic injection in generated script review
-    const safeUser = username.replace(/'/g, "");
-    const safePass = (password || "").replace(/'/g, "");
-    const safeHost = host.replace(/'/g, "");
-    const safeDb = db.replace(/`/g, "");
+    const safeUser = username.replace(/'/g, '');
+    const safePass = (password || '').replace(/'/g, '');
+    const safeHost = host.replace(/'/g, '');
+    const safeDb = db.replace(/`/g, '');
 
     let sql = `-- Base: Create user and basic metadata access\n`;
     sql += `CREATE USER IF NOT EXISTS '${safeUser}'@'${safeHost}' IDENTIFIED BY '${safePass}';\n`;

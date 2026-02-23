@@ -95,7 +95,17 @@ export interface IEventDefinition {
 // Diff related
 export interface IDiffOperation {
   type: 'ADD' | 'DROP' | 'MODIFY' | 'CHANGE';
-  target: 'TABLE' | 'COLUMN' | 'INDEX' | 'FOREIGN_KEY' | 'OPTION' | 'TRIGGER' | 'VIEW' | 'PROCEDURE' | 'FUNCTION' | 'EVENT';
+  target:
+    | 'TABLE'
+    | 'COLUMN'
+    | 'INDEX'
+    | 'FOREIGN_KEY'
+    | 'OPTION'
+    | 'TRIGGER'
+    | 'VIEW'
+    | 'PROCEDURE'
+    | 'FUNCTION'
+    | 'EVENT';
   name: string;
   tableName?: string;
   definition?: string;

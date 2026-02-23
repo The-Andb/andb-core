@@ -6,9 +6,6 @@
   "private": true,
   "license": "SEE LICENSE IN ../LICENSE",
   "main": "dist/src/index.js",
-  "bin": {
-    "andb": "dist/cli/main.js"
-  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -54,8 +51,7 @@
     "compare:prod:events": "andb compare -e PROD",
     "compare:prod:report": "andb compare -r PROD",
     "compare:prod:off": "npm run compare:prod:fn && npm run compare:prod:sp && npm run compare:prod:tbl && npm run compare:prod:trg && npm run compare:prod:views && npm run compare:prod:events && npm run compare:prod:report",
-    "compare:prod": "npm run export:dev && npm run export:prod && npm run compare:prod:off",
-    "generate": "andb generate"
+    "compare:prod": "npm run export:dev && npm run export:prod && npm run compare:prod:off"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -68,7 +64,6 @@
     "dotenv": "^17.2.3",
     "js-yaml": "^4.1.1",
     "mysql2": "^3.14.3",
-    "nest-commander": "^3.12.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
     "ssh2": "^1.15.0"

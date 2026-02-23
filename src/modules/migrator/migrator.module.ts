@@ -12,4 +12,4 @@ import { MIGRATOR_SERVICE } from '../../common/constants/tokens';
   ],
   exports: [MigratorService, MIGRATOR_SERVICE],
 })
-export class MigratorModule { }
+export class MigratorModule {}

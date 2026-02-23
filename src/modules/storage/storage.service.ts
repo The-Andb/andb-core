@@ -127,7 +127,13 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
 
   // --- DDL Operations ---
 
-  async saveDDL(environment: string, database: string, type: string, name: string, content: string) {
+  async saveDDL(
+    environment: string,
+    database: string,
+    type: string,
+    name: string,
+    content: string,
+  ) {
     if (!this.db) return;
     const checksum = crypto.createHash('md5').update(content).digest('hex');
     const stmt = this.db.prepare(`
@@ -138,7 +144,14 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
         checksum = excluded.checksum,
         updated_at = CURRENT_TIMESTAMP
     `);
-    return stmt.run(environment.toUpperCase(), database, type.toUpperCase(), name, content, checksum);
+    return stmt.run(
+      environment.toUpperCase(),
+      database,
+      type.toUpperCase(),
+      name,
+      content,
+      checksum,
+    );
   }
 
   async getDDL(environment: string, database: string, type: string, name: string) {
@@ -164,19 +177,25 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
 
   async getEnvironments() {
     if (!this.db) return [];
-    const stmt = this.db.prepare('SELECT DISTINCT environment FROM ddl_exports ORDER BY environment ASC');
+    const stmt = this.db.prepare(
+      'SELECT DISTINCT environment FROM ddl_exports ORDER BY environment ASC',
+    );
     return stmt.all().map((r: any) => r.environment);
   }
 
   async getDatabases(environment: string) {
     if (!this.db) return [];
-    const stmt = this.db.prepare('SELECT DISTINCT database_name FROM ddl_exports WHERE environment = ? ORDER BY database_name ASC');
+    const stmt = this.db.prepare(
+      'SELECT DISTINCT database_name FROM ddl_exports WHERE environment = ? ORDER BY database_name ASC',
+    );
     return stmt.all(environment.toUpperCase()).map((r: any) => r.database_name);
   }
 
   async getLastUpdated(environment: string, database: string) {
     if (!this.db) return null;
-    const stmt = this.db.prepare('SELECT MAX(updated_at) as last_updated FROM ddl_exports WHERE environment = ? AND database_name = ?');
+    const stmt = this.db.prepare(
+      'SELECT MAX(updated_at) as last_updated FROM ddl_exports WHERE environment = ? AND database_name = ?',
+    );
     const row = stmt.get(environment.toUpperCase(), database) as any;
     return row ? row.last_updated : null;
   }
@@ -184,7 +203,14 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
   // --- Comparison Operations ---
 
   async saveComparison(comp: {
-    srcEnv: string, destEnv: string, database: string, type: string, name: string, status: string, ddl?: string, alterStatements?: any
+    srcEnv: string;
+    destEnv: string;
+    database: string;
+    type: string;
+    name: string;
+    status: string;
+    ddl?: string;
+    alterStatements?: any;
   }) {
     if (!this.db) return;
     const stmt = this.db.prepare(`
@@ -202,7 +228,7 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
       comp.type.toUpperCase(),
       comp.name,
       comp.status,
-      JSON.stringify(comp.alterStatements || [])
+      JSON.stringify(comp.alterStatements || []),
     );
   }
 
@@ -229,14 +255,29 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
 
   // --- Snapshot Operations ---
 
-  async saveSnapshot(environment: string, database: string, type: string, name: string, ddl: string, tag?: string) {
+  async saveSnapshot(
+    environment: string,
+    database: string,
+    type: string,
+    name: string,
+    ddl: string,
+    tag?: string,
+  ) {
     if (!this.db) return;
     const checksum = crypto.createHash('md5').update(ddl).digest('hex');
     const stmt = this.db.prepare(`
       INSERT INTO ddl_snapshots (environment, database_name, ddl_type, ddl_name, ddl_content, checksum, version_tag)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
-    return stmt.run(environment.toUpperCase(), database, type.toUpperCase(), name, ddl, checksum, tag || null);
+    return stmt.run(
+      environment.toUpperCase(),
+      database,
+      type.toUpperCase(),
+      name,
+      ddl,
+      checksum,
+      tag || null,
+    );
   }
 
   async getSnapshots(environment: string, database: string, type: string, name: string) {
@@ -260,7 +301,16 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
 
   // --- Migration Operations ---
 
-  async saveMigration(history: { srcEnv: string, destEnv: string, database: string, type: string, name: string, operation: string, status: string, error?: string }) {
+  async saveMigration(history: {
+    srcEnv: string;
+    destEnv: string;
+    database: string;
+    type: string;
+    name: string;
+    operation: string;
+    status: string;
+    error?: string;
+  }) {
     if (!this.db) return;
     const stmt = this.db.prepare(`
       INSERT INTO migration_history (src_environment, dest_environment, database_name, ddl_type, ddl_name, operation, status, error_message)
@@ -274,13 +324,15 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
       history.name,
       history.operation,
       history.status,
-      history.error || null
+      history.error || null,
     );
   }
 
   async getMigrationHistory(limit: number = 100) {
     if (!this.db) return [];
-    const stmt = this.db.prepare('SELECT * FROM migration_history ORDER BY executed_at DESC LIMIT ?');
+    const stmt = this.db.prepare(
+      'SELECT * FROM migration_history ORDER BY executed_at DESC LIMIT ?',
+    );
     return stmt.all(limit);
   }
 
@@ -289,8 +341,14 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
   async clearConnectionData(environment: string, database: string) {
     if (!this.db) return { ddlCount: 0, comparisonCount: 0 };
     const env = environment.toUpperCase();
-    const ddl = this.db.prepare('DELETE FROM ddl_exports WHERE environment = ? AND database_name = ?').run(env, database);
-    const comp = this.db.prepare('DELETE FROM comparisons WHERE (src_environment = ? OR dest_environment = ?) AND database_name = ?').run(env, env, database);
+    const ddl = this.db
+      .prepare('DELETE FROM ddl_exports WHERE environment = ? AND database_name = ?')
+      .run(env, database);
+    const comp = this.db
+      .prepare(
+        'DELETE FROM comparisons WHERE (src_environment = ? OR dest_environment = ?) AND database_name = ?',
+      )
+      .run(env, env, database);
     return { ddlCount: ddl.changes, comparisonCount: comp.changes };
   }
 
@@ -300,16 +358,23 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     const comp = this.db.prepare('DELETE FROM comparisons').run();
     const snap = this.db.prepare('DELETE FROM ddl_snapshots').run();
     const mig = this.db.prepare('DELETE FROM migration_history').run();
-    return { ddl: ddl.changes, comparison: comp.changes, snapshot: snap.changes, migration: mig.changes };
+    return {
+      ddl: ddl.changes,
+      comparison: comp.changes,
+      snapshot: snap.changes,
+      migration: mig.changes,
+    };
   }
 
   async getStats() {
     if (!this.db) return {};
     return {
       ddlExports: (this.db.prepare('SELECT COUNT(*) as count FROM ddl_exports').get() as any).count,
-      comparisons: (this.db.prepare('SELECT COUNT(*) as count FROM comparisons').get() as any).count,
-      snapshots: (this.db.prepare('SELECT COUNT(*) as count FROM ddl_snapshots').get() as any).count,
-      dbPath: this.dbPath
+      comparisons: (this.db.prepare('SELECT COUNT(*) as count FROM comparisons').get() as any)
+        .count,
+      snapshots: (this.db.prepare('SELECT COUNT(*) as count FROM ddl_snapshots').get() as any)
+        .count,
+      dbPath: this.dbPath,
     };
   }
 }

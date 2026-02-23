@@ -41,6 +41,13 @@ export class MysqlMigrator {
       (op: IDiffOperation) => op.type === 'DROP' && op.target === 'INDEX',
     );
 
+    const addForeignKeys = operations.filter(
+      (op: IDiffOperation) => op.type === 'ADD' && op.target === 'FOREIGN_KEY',
+    );
+    const dropForeignKeys = operations.filter(
+      (op: IDiffOperation) => op.type === 'DROP' && op.target === 'FOREIGN_KEY',
+    );
+
     // 1. Drop Indexes first (to avoid conflicts if modifying columns used in indexes)
     // Legacy logic: single statement with multiple alters?
     // "ALTER TABLE `t` DROP INDEX `i`, ADD INDEX `i` (...)"
@@ -51,6 +58,9 @@ export class MysqlMigrator {
     const clauses: string[] = [];
 
     // Drops
+    dropForeignKeys.forEach((op: IDiffOperation) =>
+      clauses.push(`DROP FOREIGN KEY \`${op.name}\``),
+    );
     dropIndexes.forEach((op: IDiffOperation) => clauses.push(`DROP INDEX \`${op.name}\``));
     dropColumns.forEach((op: IDiffOperation) => clauses.push(`DROP COLUMN \`${op.name}\``));
 
@@ -61,32 +71,17 @@ export class MysqlMigrator {
       clauses.push(`MODIFY COLUMN ${def}`);
     });
 
-    // Adds
     addColumns.forEach((op: IDiffOperation) => {
-      // definition already includes "AFTER ..." from Comparator if ported correctly
-      // But if not, we must rely on definition being complete.
-      // Legacy: "ADD COLUMN definition AFTER ..."
-      // In our Comparator, we already formatted the `definition` to include "ADD COLUMN ... AFTER ..."
-      // Wait, let's check Comparator Logic in previous step.
-      // Comparator outputted: `def: "ADD COLUMN ... AFTER ..."` for ADD
-      // So we just push the definition.
-
-      // RE-READ Comparator Logic:
-      // alterColumns.push({ type: 'ADD', name: columnName, def: def });
-      // def = `${srcTable.columns[columnName]} AFTER ...`
-      // It does NOT include "ADD COLUMN" prefix in the `def` variable in Comparator loop?
-      // Let's check:
-      // alterColumns.push(`ADD COLUMN ${srcTable.columns[columnName]...}`) in Legacy.
-      // In my new Comparator:
-      // const def = `${srcTable.columns[columnName].replace(/[,;]$/, '')} AFTER \`${prevColumnName || 'FIRST'}\``;
-      // alterColumns.push({ type: 'ADD', ... def });
-      // So `def` is just the column definition + position. It misses "ADD COLUMN".
-
       clauses.push(`ADD COLUMN ${op.definition}`);
     });
 
     addIndexes.forEach((op: IDiffOperation) => {
       // Comparator srcDef: "KEY `idx` (`col`)"
+      clauses.push(`ADD ${op.definition}`);
+    });
+
+    addForeignKeys.forEach((op: IDiffOperation) => {
+      // Comparator srcDef: "CONSTRAINT `fk` FOREIGN KEY ..."
       clauses.push(`ADD ${op.definition}`);
     });
 

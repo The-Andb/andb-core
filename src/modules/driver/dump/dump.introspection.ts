@@ -2,7 +2,7 @@ import { IIntrospectionService } from '../../../common/interfaces/driver.interfa
 import { DumpDriver } from './dump.driver';
 
 export class DumpIntrospectionService implements IIntrospectionService {
-  constructor(private readonly driver: DumpDriver) { }
+  constructor(private readonly driver: DumpDriver) {}
 
   private _list(type: string): string[] {
     const map = this.driver.data[type];

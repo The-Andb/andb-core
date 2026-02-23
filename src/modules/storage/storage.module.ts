@@ -13,4 +13,4 @@ import { STORAGE_SERVICE } from '../../common/constants/tokens';
   ],
   exports: [StorageService, STORAGE_SERVICE],
 })
-export class StorageModule { }
+export class StorageModule {}

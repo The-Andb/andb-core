@@ -13,4 +13,4 @@ import { PROJECT_CONFIG_SERVICE } from '../../common/constants/tokens';
   ],
   exports: [ProjectConfigService, PROJECT_CONFIG_SERVICE],
 })
-export class ProjectConfigModule { }
+export class ProjectConfigModule {}
