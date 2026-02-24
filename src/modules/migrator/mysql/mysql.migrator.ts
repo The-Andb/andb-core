@@ -10,7 +10,7 @@ export class MysqlMigrator {
     }
 
     if ((operation === 'CREATE' || operation === 'REPLACE') && definition) {
-      statements.push(definition);
+      statements.push(definition.endsWith(';') ? definition : definition + ';');
     }
 
     return statements;
@@ -61,18 +61,31 @@ export class MysqlMigrator {
     dropForeignKeys.forEach((op: IDiffOperation) =>
       clauses.push(`DROP FOREIGN KEY \`${op.name}\``),
     );
-    dropIndexes.forEach((op: IDiffOperation) => clauses.push(`DROP INDEX \`${op.name}\``));
+    dropIndexes.forEach((op: IDiffOperation) => {
+      if (op.name === 'PRIMARY') {
+        clauses.push('DROP PRIMARY KEY');
+      } else {
+        clauses.push(`DROP INDEX \`${op.name}\``);
+      }
+    });
     dropColumns.forEach((op: IDiffOperation) => clauses.push(`DROP COLUMN \`${op.name}\``));
 
     // Modifies
     modifyColumns.forEach((op: IDiffOperation) => {
       // Legacy logic cleanup: remove DEFAULT NULL, trailing comma
-      const def = op.definition!.replace(/ DEFAULT NULL/gi, '').replace(/,$/, '');
+      let def = op.definition!.replace(/ DEFAULT NULL/gi, '').replace(/,$/, '');
+      if (!def.startsWith('\`')) {
+        def = '\`' + op.name + '\` ' + def;
+      }
       clauses.push(`MODIFY COLUMN ${def}`);
     });
 
     addColumns.forEach((op: IDiffOperation) => {
-      clauses.push(`ADD COLUMN ${op.definition}`);
+      let def = op.definition!;
+      if (!def.startsWith('\`')) {
+        def = '\`' + op.name + '\` ' + def;
+      }
+      clauses.push(`ADD COLUMN ${def}`);
     });
 
     addIndexes.forEach((op: IDiffOperation) => {
@@ -86,7 +99,7 @@ export class MysqlMigrator {
     });
 
     if (clauses.length > 0) {
-      const sql = `ALTER TABLE \`${tableName}\`\n${clauses.join(',\n')};`;
+      const sql = `ALTER TABLE \`${tableName}\` ${clauses.join(', ')};`;
       statements.push(sql);
     }
 
