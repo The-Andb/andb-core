@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import {
   PROJECT_CONFIG_SERVICE,
   STORAGE_SERVICE,
@@ -11,6 +11,8 @@ import * as fs from 'fs';
 
 @Injectable()
 export class OrchestrationService {
+  private readonly logger = new Logger(OrchestrationService.name);
+
   constructor(
     @Inject(PROJECT_CONFIG_SERVICE) private configService: any,
     @Inject(STORAGE_SERVICE) private storageService: any,
@@ -18,7 +20,7 @@ export class OrchestrationService {
     @Inject(COMPARATOR_SERVICE) private comparator: any,
     @Inject(EXPORTER_SERVICE) private exporter: any,
     @Inject(MIGRATOR_SERVICE) private migrator: any,
-  ) {}
+  ) { }
 
   async execute(operation: string, payload: any) {
     // Synchronize Config Service with Payload if provided
@@ -79,10 +81,24 @@ export class OrchestrationService {
       await driver.connect();
       results.baseConn = 'pass';
 
-      // 1. Schema Read Check
+      // 1. Schema Read Check — verify ALL DDL types are readable
       try {
         const introspection = driver.getIntrospectionService();
-        await introspection.listTables();
+        const dbName = connection.database || connection.name || 'default';
+
+        // Basic: list tables
+        await introspection.listTables(dbName);
+
+        // Critical: verify routine DDL access (SHOW_ROUTINE privilege)
+        // This is the most common failure point for restricted users
+        const procs = await introspection.listProcedures(dbName);
+        if (procs.length > 0) {
+          const ddl = await introspection.getProcedureDDL(dbName, procs[0]);
+          if (ddl === null || ddl === undefined) {
+            this.logger.warn(`Probe: procedure "${procs[0]}" listed but DDL is NULL — SHOW_ROUTINE privilege may be missing`);
+          }
+        }
+
         results.schemaRead = 'pass';
       } catch (e) {
         results.schemaRead = 'fail';
@@ -109,8 +125,8 @@ export class OrchestrationService {
   }
 
   private async exportSchema(payload: any) {
-    const { env, name = null } = payload;
-    return await this.exporter.exportSchema(env, name);
+    const { env, name = null, type = null } = payload;
+    return await this.exporter.exportSchema(env, name, type);
   }
 
   private async getSchemaObjects(payload: any) {
@@ -160,12 +176,13 @@ export class OrchestrationService {
       const dbName = srcConn.config.database || 'default';
       const destDbName = destConn.config.database || 'default';
 
-      const diff = await this.comparator.compareSchema(srcIntro, destIntro, dbName);
+      const diff = await this.comparator.compareSchema(srcIntro, destIntro, dbName, destDbName);
       const results: any[] = [];
 
       if (ddlType === 'tables') {
+        const migrator = destDriver.getMigrator(); // Destination dialect determines generated SQL
         for (const name of Object.keys(diff.tables)) {
-          const ddl = this.migrator.generateAlterSQL(diff.tables[name]);
+          const ddl = this.migrator.generateAlterSQL(diff.tables[name], migrator);
           const result = {
             name,
             status: 'different',
@@ -260,6 +277,8 @@ export class OrchestrationService {
         // 1. Add Diff Items
         const processedNames = new Set<string>();
 
+        const migrator = destDriver.getMigrator(); // Destination dialect determines generated SQL
+
         for (const obj of diff.objects) {
           const typeMatch =
             obj.type.toLowerCase() + 's' === ddlType ||
@@ -268,7 +287,7 @@ export class OrchestrationService {
 
           processedNames.add(obj.name);
 
-          const ddl = this.migrator.generateObjectSQL(obj);
+          const ddl = this.migrator.generateObjectSQL(obj, migrator);
           const result = {
             name: obj.name,
             status:
@@ -362,9 +381,41 @@ export class OrchestrationService {
     const successful: any[] = [];
     const failed: any[] = [];
 
+    const autoBackup = this.configService.getAutoBackup();
+    const dbName = destConn.config.database || 'default';
+
     try {
       await destDriver.connect();
+      const destIntro = destDriver.getIntrospectionService();
+
       for (const obj of objects) {
+        // Auto-backup before destructive/update operations
+        if (
+          autoBackup &&
+          (obj.status === 'UPDATED' ||
+            obj.status === 'DEPRECATED' ||
+            obj.status === 'different' ||
+            obj.status === 'modified' ||
+            obj.status === 'missing_in_source')
+        ) {
+          try {
+            const currentDdl = await destIntro.getObjectDDL(dbName, obj.type, obj.name);
+            if (currentDdl) {
+              await this.storageService.saveSnapshot(
+                destEnv,
+                dbName,
+                obj.type,
+                obj.name,
+                currentDdl,
+                'PRE_MIGRATE',
+              );
+              this.logger.log(`Auto-backup created for ${obj.type} ${obj.name}`);
+            }
+          } catch (e: any) {
+            this.logger.warn(`Failed to create auto-backup for ${obj.name}: ${e.message}`);
+          }
+        }
+
         try {
           if (Array.isArray(obj.ddl)) {
             for (const statement of obj.ddl) {
@@ -374,25 +425,27 @@ export class OrchestrationService {
             await destDriver.query(obj.ddl);
           }
           successful.push(obj);
-          await this.storageService.saveMigration(
+          await this.storageService.saveMigration({
+            srcEnv,
             destEnv,
-            destConn.config.database || 'default',
-            obj.type,
-            obj.name,
-            obj.status,
-            'SUCCESS',
-          );
+            database: dbName,
+            type: obj.type,
+            name: obj.name,
+            operation: obj.status,
+            status: 'SUCCESS',
+          });
         } catch (err: any) {
           failed.push({ ...obj, error: err.message });
-          await this.storageService.saveMigration(
+          await this.storageService.saveMigration({
+            srcEnv,
             destEnv,
-            destConn.config.database || 'default',
-            obj.type,
-            obj.name,
-            obj.status,
-            'FAILED',
-            err.message,
-          );
+            database: dbName,
+            type: obj.type,
+            name: obj.name,
+            operation: obj.status,
+            status: 'FAILED',
+            error: err.message,
+          });
         }
       }
       return { success: true, successful, failed };
@@ -411,15 +464,40 @@ export class OrchestrationService {
       const statements = Array.isArray(script)
         ? script
         : script
-            .split(';')
-            .map((s: string) => s.trim())
-            .filter((s: string) => s.length > 0);
+          .split(';')
+          .map((s: string) => s.trim())
+          .filter((s: string) => s.length > 0);
 
       for (const stmt of statements) {
         if (!stmt) continue;
         try {
           await driver.query(stmt);
         } catch (err: any) {
+          // Handle cases where REVOKE fails because no such grant exists
+          // Error 1141: There is no such grant defined for user '...' on host '...'
+          const cleanStmt = stmt.replace(/--.*$/gm, '').trim().toUpperCase();
+          const isRevoke = cleanStmt.startsWith('REVOKE');
+          const isShowRoutine = cleanStmt.includes('SHOW_ROUTINE');
+
+          const isNoSuchGrant =
+            err.message.toLowerCase().includes('no such grant') ||
+            err.code === 'ER_NONEXISTING_GRANT';
+
+          const isIllegalLevel =
+            err.message.toLowerCase().includes('illegal privilege level') ||
+            err.code === 'ER_ILLEGAL_PRIVILEGE_LEVEL' ||
+            err.message.includes('3619');
+
+          if (isRevoke && isNoSuchGrant) {
+            this.logger.warn(`Ignored "no such grant" error for statement: ${stmt}`);
+            continue;
+          }
+
+          if (isShowRoutine && isIllegalLevel) {
+            this.logger.warn(`Ignored "illegal privilege level" error for SHOW_ROUTINE statement: ${stmt}`);
+            continue;
+          }
+
           throw new Error(`Failed to execute statement: ${stmt}. Error: ${err.message}`);
         }
       }

@@ -3,12 +3,14 @@ import {
   IIntrospectionService,
   IMonitoringService,
   IDatabaseConfig,
+  IMigrator,
 } from '../../../common/interfaces/driver.interface';
 import { Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DumpIntrospectionService } from './dump.introspection';
 import { ParserService } from '../../parser/parser.service';
+import { MysqlMigrator } from '../../migrator/mysql/mysql.migrator';
 
 export class DumpDriver implements IDatabaseDriver {
   private readonly logger = new Logger(DumpDriver.name);
@@ -22,11 +24,12 @@ export class DumpDriver implements IDatabaseDriver {
     EVENTS: new Map(),
   };
   private introspectionService?: IIntrospectionService;
+  private migrator?: IMigrator;
 
   constructor(
     private readonly config: IDatabaseConfig,
     private readonly parserService: ParserService,
-  ) {}
+  ) { }
 
   async connect(): Promise<void> {
     // DumpPath is usually passed via host or a specific field if we extended the interface
@@ -77,6 +80,13 @@ export class DumpDriver implements IDatabaseDriver {
       this.introspectionService = new DumpIntrospectionService(this);
     }
     return this.introspectionService!;
+  }
+
+  getMigrator(): IMigrator {
+    if (!this.migrator) {
+      this.migrator = new MysqlMigrator(); // Offline dumps generate MySQL syntax currently
+    }
+    return this.migrator!;
   }
 
   getMonitoringService(): IMonitoringService {

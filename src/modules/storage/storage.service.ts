@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
-import * as Database from 'better-sqlite3';
+import Database = require('better-sqlite3');
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
@@ -32,7 +32,9 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    this.logger.log(`Initializing SQLite storage at: ${dbPath}`);
+    if (!process.env.ANDB_QUIET) {
+      this.logger.log(`Initializing SQLite storage at: ${dbPath}`);
+    }
     this.db = new Database(dbPath);
     this._initSchema();
   }

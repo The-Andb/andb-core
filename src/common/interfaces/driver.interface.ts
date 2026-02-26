@@ -1,3 +1,5 @@
+import { ITableDiff, ISchemaDiff, IObjectDiff } from './diff.interface';
+
 export interface IDatabaseConfig {
   host?: string;
   port?: number;
@@ -37,6 +39,11 @@ export interface IDatabaseDriver {
    * Get the Monitoring Service for this driver
    */
   getMonitoringService(): IMonitoringService;
+
+  /**
+   * Get the SQL Migrator for this driver
+   */
+  getMigrator(): IMigrator;
 
   /**
    * Get the session context (sql_mode, time_zone, etc.)
@@ -95,3 +102,9 @@ export interface IMonitoringService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getTransactions(): Promise<any>;
 }
+
+export interface IMigrator {
+  generateObjectSQL(diff: IObjectDiff): string[];
+  generateTableAlterSQL(diff: ITableDiff): string[];
+}
+

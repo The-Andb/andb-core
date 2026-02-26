@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 export * from './common/constants/tokens';
+export * from './common/interfaces/connection.interface';
+export * from './common/interfaces/driver.interface';
 export * from './core-bridge';
 export { Container } from './core-bridge';
 export { AppModule } from './app.module';
@@ -21,6 +23,7 @@ export * from './modules/comparator/comparator.service';
 export * from './modules/comparator/comparator.module';
 export * from './modules/migrator/migrator.service';
 export * from './modules/migrator/migrator.module';
+export * from './modules/migrator/mysql/mysql.migrator';
 export * from './modules/exporter/exporter.service';
 export * from './modules/exporter/exporter.module';
 export * from './modules/reporter/reporter.service';

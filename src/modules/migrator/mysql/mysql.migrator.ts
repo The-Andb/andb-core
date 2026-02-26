@@ -48,14 +48,14 @@ export class MysqlMigrator {
       (op: IDiffOperation) => op.type === 'DROP' && op.target === 'FOREIGN_KEY',
     );
 
-    // 1. Drop Indexes first (to avoid conflicts if modifying columns used in indexes)
-    // Legacy logic: single statement with multiple alters?
-    // "ALTER TABLE `t` DROP INDEX `i`, ADD INDEX `i` (...)"
-
-    // We will build a single ALTER TABLE statement with multiple clauses if possible,
-    // ensuring order: DROP INDEX -> DROP COLUMN -> MODIFY COLUMN -> ADD COLUMN -> ADD INDEX
+    // MySQL quirk: Cannot DROP and ADD a FK with the same name in a single ALTER TABLE.
+    // MySQL validates constraint names before processing drops within the same statement.
+    // Solution: If any FK name appears in both DROP and ADD, split into two ALTER statements.
+    const dropFkNames = new Set(dropForeignKeys.map((op: IDiffOperation) => op.name));
+    const hasFkModification = addForeignKeys.some((op: IDiffOperation) => dropFkNames.has(op.name));
 
     const clauses: string[] = [];
+    const addFkClauses: string[] = [];
 
     // Drops
     dropForeignKeys.forEach((op: IDiffOperation) =>
@@ -93,13 +93,25 @@ export class MysqlMigrator {
       clauses.push(`ADD ${op.definition}`);
     });
 
-    addForeignKeys.forEach((op: IDiffOperation) => {
-      // Comparator srcDef: "CONSTRAINT `fk` FOREIGN KEY ..."
-      clauses.push(`ADD ${op.definition}`);
-    });
+    // FK Adds: put in separate statement if modification detected
+    if (hasFkModification) {
+      addForeignKeys.forEach((op: IDiffOperation) => {
+        addFkClauses.push(`ADD ${op.definition}`);
+      });
+    } else {
+      addForeignKeys.forEach((op: IDiffOperation) => {
+        clauses.push(`ADD ${op.definition}`);
+      });
+    }
 
     if (clauses.length > 0) {
       const sql = `ALTER TABLE \`${tableName}\` ${clauses.join(', ')};`;
+      statements.push(sql);
+    }
+
+    // Second ALTER for FK adds (only when modifying FKs)
+    if (addFkClauses.length > 0) {
+      const sql = `ALTER TABLE \`${tableName}\` ${addFkClauses.join(', ')};`;
       statements.push(sql);
     }
 

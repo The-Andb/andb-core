@@ -134,6 +134,7 @@ describe('OrchestrationService', () => {
         connect: jest.fn(),
         disconnect: jest.fn(),
         getIntrospectionService: jest.fn().mockReturnValue(mockIntro),
+        getMigrator: jest.fn(), // We provide the mockMigrator via the module scope anyway, but we still need the stub
       };
       driverFactory.create.mockResolvedValue(mockDriver);
 

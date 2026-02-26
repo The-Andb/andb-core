@@ -3,6 +3,7 @@ import { AppModule } from '../src/app.module';
 import { ComparatorService } from '../src/modules/comparator/comparator.service';
 import { DriverFactoryService } from '../src/modules/driver/driver-factory.service';
 import { MigratorService } from '../src/modules/migrator/migrator.service';
+import { MysqlMigrator } from '../src/modules/migrator/mysql/mysql.migrator';
 import * as path from 'path';
 import { ConnectionType } from '../src/common/interfaces/connection.interface';
 import { IObjectDiff } from '../src/common/interfaces/diff.interface';
@@ -12,6 +13,7 @@ async function testFullSchemaComparison() {
   const comparator = app.get(ComparatorService);
   const driverFactory = app.get(DriverFactoryService);
   const migrator = app.get(MigratorService);
+  const defaultMigrator = new MysqlMigrator();
 
   const f1Path = path.join(process.cwd(), 'scripts', 'f1.sql');
   const ddl2File = path.join(process.cwd(), 'scripts', 'f2.sql');
@@ -31,7 +33,7 @@ async function testFullSchemaComparison() {
   console.log('Dropped Tables:', diff.droppedTables);
   console.log('Objects Changed:', diff.objects.map((o: IObjectDiff) => `${o.type} ${o.name} (${o.operation})`));
 
-  const sql = migrator.generateSchemaSQL(diff);
+  const sql = migrator.generateSchemaSQL(diff, defaultMigrator);
   console.log('\n--- Generated Migration SQL ---');
   console.log(sql.join('\n'));
 

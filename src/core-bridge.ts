@@ -15,12 +15,19 @@ export class CoreBridge {
   private static storage: any = null;
   private static config: any = null;
   private static services: any = {};
+  private static initPromise: Promise<any> | null = null;
 
   /**
-   * Initialize the Core Engine (Singleton)
+   * Initialize the Core Engine (Singleton with Lock)
    */
   public static async init(userDataPath?: string) {
-    if (!this.app) {
+    if (this.app) return this.app;
+
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
+    this.initPromise = (async () => {
       console.log('🚀 [CoreBridge] Initializing NestJS Engine...');
       this.app = await NestFactory.createApplicationContext(AppModule, {
         logger: ['error', 'warn'],
@@ -43,8 +50,10 @@ export class CoreBridge {
         this.storage.initialize(dbPath);
       }
       console.log('✅ [CoreBridge] Engine Ready.');
-    }
-    return this.app;
+      return this.app;
+    })();
+
+    return this.initPromise;
   }
 
   /**

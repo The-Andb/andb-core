@@ -12,7 +12,7 @@ import { IIntrospectionService } from '../../common/interfaces/driver.interface'
 export class ComparatorService {
   private readonly logger = new Logger(ComparatorService.name);
 
-  constructor(private readonly parser: ParserService) {}
+  constructor(private readonly parser: ParserService) { }
 
   /**
    * Compare two CREATE TABLE statements and return differences
@@ -109,7 +109,9 @@ export class ComparatorService {
     for (const columnName in srcTable.columns) {
       if (!destTable.columns[columnName]) {
         // ADD
-        const def = `${srcTable.columns[columnName].replace(/[,;]$/, '')} AFTER \`${prevColumnName || 'FIRST'}\``;
+        const colDef = srcTable.columns[columnName].replace(/[,;]$/, '');
+        const position = prevColumnName ? `AFTER \`${prevColumnName}\`` : 'FIRST';
+        const def = `${colDef} ${position}`;
         alterColumns.push({ type: 'ADD', name: columnName, def: def });
       } else {
         // Check MODIFY
@@ -274,7 +276,7 @@ export class ComparatorService {
       srcTrigger.event !== destTrigger.event ||
       srcTrigger.tableName !== destTrigger.tableName ||
       this.parser.normalize(srcDDL, { ignoreDefiner: true, ignoreWhitespace: true }) !==
-        this.parser.normalize(destDDL, { ignoreDefiner: true, ignoreWhitespace: true });
+      this.parser.normalize(destDDL, { ignoreDefiner: true, ignoreWhitespace: true });
 
     if (hasChanges) {
       return { type: 'TRIGGER', name, operation: 'REPLACE', definition: srcDDL };
@@ -289,8 +291,10 @@ export class ComparatorService {
   async compareSchema(
     src: IIntrospectionService,
     dest: IIntrospectionService,
-    dbName: string,
+    srcDbName: string,
+    destDbName?: string,
   ): Promise<ISchemaDiff> {
+    const targetDbName = destDbName || srcDbName;
     const diff: ISchemaDiff = {
       tables: {},
       droppedTables: [],
@@ -303,13 +307,13 @@ export class ComparatorService {
     };
 
     // 1. Compare Tables
-    const srcTables = await src.listTables(dbName);
-    const destTables = await dest.listTables(dbName);
+    const srcTables = await src.listTables(srcDbName);
+    const destTables = await dest.listTables(targetDbName);
 
     // New or Change
     for (const tableName of srcTables) {
-      const srcDDL = await src.getTableDDL(dbName, tableName);
-      const destDDL = await dest.getTableDDL(dbName, tableName);
+      const srcDDL = await src.getTableDDL(srcDbName, tableName);
+      const destDDL = await dest.getTableDDL(targetDbName, tableName);
 
       if (!destDDL) {
         // New table - for now handled by Migrator if we just send the diff
@@ -344,14 +348,14 @@ export class ComparatorService {
     ];
 
     for (const type of types) {
-      const srcList = await this._listObjects(src, type, dbName);
-      const destList = await this._listObjects(dest, type, dbName);
+      const srcList = await this._listObjects(src, type, srcDbName);
+      const destList = await this._listObjects(dest, type, targetDbName);
 
       const allNames = new Set([...srcList, ...destList]);
 
       for (const name of allNames) {
-        const srcDDL = srcList.includes(name) ? await this._getDDL(src, type, dbName, name) : '';
-        const destDDL = destList.includes(name) ? await this._getDDL(dest, type, dbName, name) : '';
+        const srcDDL = srcList.includes(name) ? await this._getDDL(src, type, srcDbName, name) : '';
+        const destDDL = destList.includes(name) ? await this._getDDL(dest, type, targetDbName, name) : '';
 
         const objDiff = this.compareGenericDDL(type, name, srcDDL, destDDL);
         if (objDiff) {
@@ -363,13 +367,13 @@ export class ComparatorService {
     }
 
     // 3. Compare Triggers
-    const srcTriggers = await src.listTriggers(dbName);
-    const destTriggers = await dest.listTriggers(dbName);
+    const srcTriggers = await src.listTriggers(srcDbName);
+    const destTriggers = await dest.listTriggers(targetDbName);
     const allTriggers = new Set([...srcTriggers, ...destTriggers]);
 
     for (const name of allTriggers) {
-      const srcDDL = srcTriggers.includes(name) ? await src.getTriggerDDL(dbName, name) : '';
-      const destDDL = destTriggers.includes(name) ? await dest.getTriggerDDL(dbName, name) : '';
+      const srcDDL = srcTriggers.includes(name) ? await src.getTriggerDDL(srcDbName, name) : '';
+      const destDDL = destTriggers.includes(name) ? await dest.getTriggerDDL(targetDbName, name) : '';
 
       const objDiff = this.compareTriggers(name, srcDDL, destDDL);
       if (objDiff) {

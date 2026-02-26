@@ -57,6 +57,12 @@ export class ProjectConfigService {
     return this.config.domainNormalization || { pattern: /(?!)/, replacement: '' };
   }
 
+  getAutoBackup(): boolean {
+    // Default to true if not specified
+    if (this.config.autoBackup === undefined) return true;
+    return !!this.config.autoBackup;
+  }
+
   setConnection(env: string, config: IDatabaseConfig, type: ConnectionType = ConnectionType.MYSQL) {
     if (!this.config.getDBDestination) {
       this.config.getDBDestination = {};
@@ -66,5 +72,9 @@ export class ProjectConfigService {
 
   setDomainNormalization(pattern: RegExp, replacement: string) {
     this.config.domainNormalization = { pattern, replacement };
+  }
+
+  setAutoBackup(enabled: boolean) {
+    this.config.autoBackup = enabled;
   }
 }

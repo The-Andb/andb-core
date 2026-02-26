@@ -7,7 +7,7 @@ Intelligent Schema Management, Seamless Synchronization, and High-Fidelity Repor
 
 ## 🌟 Overview
 
-**The Andb Core (Nest)** is a complete rewrite of the heart of the Andb Orchestrator ecosystem. By leveraging NestJS and TypeScript, we provide an even more robust, type-safe, and modular engine to manage database schemas across multiple environments (DEV, STAGE, PROD) with absolute precision.
+**The Andb Core (Nest)** is a complete rewrite of the heart of The Andb Orchestrator ecosystem. By leveraging NestJS and TypeScript, we provide an even more robust, type-safe, and modular engine to manage database schemas across multiple environments (DEV, STAGE, PROD) with absolute precision.
 
 This rewrite follows our **"Twin Engine" strategy**, building the new engine side-by-side with the legacy one to ensure 100% feature parity and a seamless transition.
 

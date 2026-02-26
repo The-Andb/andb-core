@@ -14,9 +14,9 @@ export class ExporterService {
     private readonly driverFactory: DriverFactoryService,
     private readonly configService: ProjectConfigService,
     @Inject(STORAGE_SERVICE) private readonly storageService: any,
-  ) {}
+  ) { }
 
-  async exportSchema(envName: string, specificName?: string) {
+  async exportSchema(envName: string, specificName?: string, typeFilter?: string) {
     const connection = this.configService.getConnection(envName);
     if (!connection) {
       throw new Error(`Connection not found for env: ${envName}`);
@@ -32,7 +32,12 @@ export class ExporterService {
       this._ensureDir(baseDir);
       this._ensureDir(path.join(baseDir, 'current-ddl'));
 
-      const types = ['TABLE', 'VIEW', 'PROCEDURE', 'FUNCTION', 'TRIGGER', 'EVENT'] as const;
+      const allTypes = ['TABLE', 'VIEW', 'PROCEDURE', 'FUNCTION', 'TRIGGER', 'EVENT'] as const;
+      // If typeFilter is provided, only process matching type(s)
+      const normalizedFilter = typeFilter?.toUpperCase().replace(/S$/, ''); // 'procedures' -> 'PROCEDURE'
+      const types = normalizedFilter
+        ? allTypes.filter(t => t === normalizedFilter)
+        : allTypes;
       const summary: Record<string, number> = {};
 
       for (const type of types) {
@@ -44,16 +49,36 @@ export class ExporterService {
         summary[pluralType] = list.length;
 
         const exportedNames: string[] = [];
+        let savedCount = 0;
+        let emptyDDLCount = 0;
+        let errorCount = 0;
+
         for (const name of list) {
-          const ddl = await this._getDDL(introspection, dbName, type, name);
-          if (ddl) {
-            // Save to file
-            fs.writeFileSync(path.join(dir, `${name}.sql`), ddl);
+          try {
+            const ddl = await this._getDDL(introspection, dbName, type, name);
+
+            if (!ddl) {
+              emptyDDLCount++;
+            }
+
+            // Save to file — always write, even if DDL is empty
+            fs.writeFileSync(path.join(dir, `${name}.sql`), ddl || '');
             exportedNames.push(name);
 
-            // Save to storage (NEW)
-            await this.storageService.saveDDL(envName, dbName, pluralType, name, ddl);
+            // Save to storage — always save so it appears in sidebar list
+            await this.storageService.saveDDL(envName, dbName, pluralType, name, ddl || '');
+            savedCount++;
+          } catch (err: any) {
+            errorCount++;
+            this.logger.error(`[Export] Failed to export ${type} "${name}": ${err.message}`);
           }
+        }
+
+        // Diagnostic summary per type
+        if (list.length > 0) {
+          this.logger.log(
+            `[Export] ${pluralType}: listed=${list.length}, saved=${savedCount}, emptyDDL=${emptyDDLCount}, errors=${errorCount}`,
+          );
         }
 
         // Save list file for parity with legacy
@@ -64,6 +89,7 @@ export class ExporterService {
           );
         }
       }
+
 
       this.logger.log(`Exported schema for ${envName}: ${JSON.stringify(summary)}`);
       return summary;

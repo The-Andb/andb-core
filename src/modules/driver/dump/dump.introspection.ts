@@ -2,7 +2,7 @@ import { IIntrospectionService } from '../../../common/interfaces/driver.interfa
 import { DumpDriver } from './dump.driver';
 
 export class DumpIntrospectionService implements IIntrospectionService {
-  constructor(private readonly driver: DumpDriver) {}
+  constructor(private readonly driver: DumpDriver) { }
 
   private _list(type: string): string[] {
     const map = this.driver.data[type];
@@ -58,6 +58,7 @@ export class DumpIntrospectionService implements IIntrospectionService {
 
   async getObjectDDL(db: string, type: string, name: string): Promise<string> {
     const t = type.toUpperCase();
+    if (t === 'TABLE') return this.getTableDDL(db, name);
     if (t === 'VIEW') return this.getViewDDL(db, name);
     if (t === 'PROCEDURE') return this.getProcedureDDL(db, name);
     if (t === 'FUNCTION') return this.getFunctionDDL(db, name);

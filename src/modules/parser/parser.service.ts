@@ -372,7 +372,10 @@ export class ParserService {
         } else if (
           line.includes('PRIMARY KEY') ||
           line.includes('UNIQUE KEY') ||
+          line.includes('FULLTEXT KEY') ||
+          line.includes('SPATIAL KEY') ||
           line.includes('CONSTRAINT') ||
+          line.includes('INDEX') ||
           (line.trim().startsWith('KEY') && line.includes('`'))
         ) {
           insideIndexDefinitions = true;

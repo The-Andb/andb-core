@@ -2,12 +2,14 @@
 import { ComparatorService } from '../src/modules/comparator/comparator.service';
 import { ParserService } from '../src/modules/parser/parser.service';
 import { MigratorService } from '../src/modules/migrator/migrator.service';
+import { MysqlMigrator } from '../src/modules/migrator/mysql/mysql.migrator';
 
 console.log('🧪 Starting Mirror Test: Migrator Service');
 
 const parser = new ParserService();
 const comparator = new ComparatorService(parser);
 const migrator = new MigratorService();
+const defaultMigrator = new MysqlMigrator();
 
 // --- Test Case 1: Add Column ---
 const ddl1 = `CREATE TABLE \`users\` (
@@ -25,7 +27,7 @@ const ddl2_src = `CREATE TABLE \`users\` (
 
 console.log('\nCase 1: Generate SQL for ADD COLUMN');
 const diff1 = comparator.compareTables(ddl2_src, ddl1); // Src has age, Dest doesn't
-const sql1 = migrator.generateAlterSQL(diff1);
+const sql1 = migrator.generateAlterSQL(diff1, defaultMigrator);
 console.log('SQL:', sql1);
 if (sql1.length > 0 && sql1[0].includes('ADD COLUMN `age` int(11) DEFAULT 0')) {
   console.log('✅ Correct SQL Generated');
@@ -43,7 +45,7 @@ const ddl3_src = `CREATE TABLE \`users\` (
 
 console.log('\nCase 2: Generate SQL for MODIFY COLUMN');
 const diff2 = comparator.compareTables(ddl3_src, ddl1);
-const sql2 = migrator.generateAlterSQL(diff2);
+const sql2 = migrator.generateAlterSQL(diff2, defaultMigrator);
 console.log('SQL:', sql2);
 if (sql2.length > 0 && sql2[0].includes('MODIFY COLUMN `name` varchar(100)')) {
   console.log('✅ Correct SQL Generated');
@@ -66,7 +68,7 @@ const ddl4_src_no_index = `CREATE TABLE \`users\` (
 
 console.log('\nCase 3: Generate SQL for DROP INDEX');
 const diff3 = comparator.compareTables(ddl4_src_no_index, ddl4_dest_with_index);
-const sql3 = migrator.generateAlterSQL(diff3);
+const sql3 = migrator.generateAlterSQL(diff3, defaultMigrator);
 console.log('SQL:', sql3);
 if (sql3.length > 0 && sql3[0].includes('DROP INDEX `idx_name`')) {
   console.log('✅ Correct SQL Generated');

@@ -3,10 +3,12 @@ import {
   IDatabaseConfig,
   IIntrospectionService,
   IMonitoringService,
+  IMigrator,
 } from '../../../common/interfaces/driver.interface';
 import { ISshConfig } from '../../../common/interfaces/connection.interface';
 import { MysqlIntrospectionService } from './mysql.introspection';
 import { MysqlMonitoringService } from './mysql.monitoring';
+import { MysqlMigrator } from '../../migrator/mysql/mysql.migrator';
 import { SshTunnel } from '../ssh-tunnel';
 import * as mysql from 'mysql2/promise'; // Use promise wrapper natively
 import { Logger } from '@nestjs/common';
@@ -20,6 +22,7 @@ export class MysqlDriver implements IDatabaseDriver {
   // Cache services
   private introspectionService?: IIntrospectionService;
   private monitoringService?: IMonitoringService;
+  private migrator?: IMigrator;
   private parserService: ParserService;
 
   constructor(private readonly config: IDatabaseConfig) {
@@ -30,8 +33,8 @@ export class MysqlDriver implements IDatabaseDriver {
     try {
       let stream: NodeJS.ReadWriteStream | undefined;
 
-      // Handle SSH Tunneling
-      if (this.config.sshConfig) {
+      // Handle SSH Tunneling — only if sshConfig has a valid host
+      if (this.config.sshConfig && this.config.sshConfig.host) {
         this.logger.log(`Initializing SSH Tunnel to ${this.config.sshConfig.host}...`);
         this.sshTunnel = new SshTunnel(this.config.sshConfig as ISshConfig);
 
@@ -114,6 +117,13 @@ export class MysqlDriver implements IDatabaseDriver {
     return this.monitoringService;
   }
 
+  getMigrator(): IMigrator {
+    if (!this.migrator) {
+      this.migrator = new MysqlMigrator();
+    }
+    return this.migrator!;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async getSessionContext(): Promise<any> {
     const results = await this.query(`
@@ -137,8 +147,9 @@ export class MysqlDriver implements IDatabaseDriver {
     database?: string;
     host?: string;
     permissions: any;
+    isReconfigure?: boolean;
   }): Promise<string> {
-    const { username, password, database, host = '%', permissions } = params;
+    const { username, password, database, host = '%', permissions, isReconfigure = false } = params;
     const db = database || 'default';
 
     // Safety check for quotes to prevent basic injection in generated script review
@@ -147,12 +158,28 @@ export class MysqlDriver implements IDatabaseDriver {
     const safeHost = host.replace(/'/g, '');
     const safeDb = db.replace(/`/g, '');
 
-    let sql = `-- Base: Create user and basic metadata access\n`;
-    sql += `CREATE USER IF NOT EXISTS '${safeUser}'@'${safeHost}' IDENTIFIED BY '${safePass}';\n`;
-    sql += `ALTER USER '${safeUser}'@'${safeHost}' IDENTIFIED BY '${safePass}';\n\n`;
+    let sql = '';
+    if (!isReconfigure) {
+      sql += `-- Base: Create user and basic metadata access\n`;
+      sql += `CREATE USER IF NOT EXISTS '${safeUser}'@'${safeHost}' IDENTIFIED BY '${safePass}';\n`;
+      sql += `ALTER USER '${safeUser}'@'${safeHost}' IDENTIFIED BY '${safePass}';\n\n`;
+    } else {
+      sql += `-- Reconfigure privileges for existing user '${safeUser}'@'${safeHost}'\n`;
+    }
+
+    sql += `-- Reset: Remove all existing privileges (supports re-configuration & downgrade)\n`;
+    sql += `REVOKE ALL PRIVILEGES ON \`${safeDb}\`.* FROM '${safeUser}'@'${safeHost}';\n\n`;
 
     sql += `-- READ Permissions (Required)\n`;
-    sql += `GRANT SELECT, SHOW VIEW ON \`${safeDb}\`.* TO '${safeUser}'@'${safeHost}';\n\n`;
+    sql += `-- SELECT: read table/view data and information_schema\n`;
+    sql += `-- SHOW VIEW: read view definitions via SHOW CREATE VIEW\n`;
+    sql += `-- TRIGGER: read trigger definitions via SHOW CREATE TRIGGER\n`;
+    sql += `-- EVENT: read event definitions via SHOW CREATE EVENT\n`;
+    sql += `GRANT SELECT, SHOW VIEW, TRIGGER, EVENT ON \`${safeDb}\`.* TO '${safeUser}'@'${safeHost}';\n\n`;
+
+    sql += `-- Global READ Permissions (Required for metadata access)\n`;
+    sql += `-- SHOW_ROUTINE: read procedure/function bodies via SHOW CREATE PROCEDURE/FUNCTION (MySQL 8.0.20+)\n`;
+    sql += `GRANT SHOW_ROUTINE ON *.* TO '${safeUser}'@'${safeHost}';\n\n`;
 
     if (permissions.writeAlter) {
       sql += `-- Group: WRITE - DDL Operations\n`;

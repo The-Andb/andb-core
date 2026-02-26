@@ -3,6 +3,7 @@ import { MysqlDriver } from '../src/modules/driver/mysql/mysql.driver';
 import { ParserService } from '../src/modules/parser/parser.service';
 import { ComparatorService } from '../src/modules/comparator/comparator.service';
 import { MigratorService } from '../src/modules/migrator/migrator.service';
+import { MysqlMigrator } from '../src/modules/migrator/mysql/mysql.migrator';
 import { IDatabaseConfig } from '../src/common/interfaces/driver.interface';
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '../.env' });
@@ -34,6 +35,7 @@ async function runE2E() {
   const parser = new ParserService();
   const comparator = new ComparatorService(parser);
   const migrator = new MigratorService();
+  const defaultMigrator = new MysqlMigrator();
 
   try {
     // 2. Connect
@@ -91,7 +93,7 @@ async function runE2E() {
 
     // 6. Generate SQL
     console.log('🛠️  Generating Migration SQL...');
-    const sqlStatements = migrator.generateAlterSQL(diff);
+    const sqlStatements = migrator.generateAlterSQL(diff, defaultMigrator);
 
     if (sqlStatements.length > 0) {
       console.log('\n📜 Generated SQL:');

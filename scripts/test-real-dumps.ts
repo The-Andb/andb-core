@@ -3,6 +3,7 @@ import { DumpDriver } from '../src/modules/driver/dump/dump.driver';
 import { ParserService } from '../src/modules/parser/parser.service';
 import { ComparatorService } from '../src/modules/comparator/comparator.service';
 import { MigratorService } from '../src/modules/migrator/migrator.service';
+import { MysqlMigrator } from '../src/modules/migrator/mysql/mysql.migrator';
 import * as path from 'path';
 
 /**
@@ -36,6 +37,7 @@ async function runRealWorldTest() {
   // 2. Initialize Services
   const comparator = new ComparatorService(parser);
   const migrator = new MigratorService();
+  const defaultMigrator = new MysqlMigrator();
 
   const service1 = driver1.getIntrospectionService();
   const service2 = driver2.getIntrospectionService();
@@ -67,7 +69,7 @@ async function runRealWorldTest() {
       console.log(`   ⚠️  Table \`${tableName}\` has changes:`);
       diff.operations.forEach(op => console.log(`      - [${op.type}] ${op.target} ${op.name}`));
 
-      const sql = migrator.generateAlterSQL(diff);
+      const sql = migrator.generateAlterSQL(diff, defaultMigrator);
       if (sql.length > 0) {
         console.log(`      📜 SQL: ${sql[0].replace(/\n/g, ' ')}`);
       }
