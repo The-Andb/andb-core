@@ -322,14 +322,16 @@ export class ParserService {
       'COALESCE',
     ]);
 
-    // Split the query into individual words
-    const words = query.split(/\b/);
-
-    // Convert keywords to uppercase
-    return words
-      .map((word) => (keywords.has(word.toUpperCase()) ? word.toUpperCase() : word))
-      .join('')
-      .replace(/\`(GROUP|USER|GROUPS)\`/g, (match, p1) => `\`${p1.toLowerCase()}\``)
+    // Use regex to match backticked identifiers, quotes, or regular words.
+    // This prevents uppercasing keywords when they are used as column names (e.g., `end`) or inside string literals.
+    return query
+      .replace(/`[^`]*`|'[^']*'|"[^"]*"|\b[a-zA-Z_]+\b/g, (match) => {
+        if (match.startsWith('`') || match.startsWith("'") || match.startsWith('"')) {
+          return match; // Keep literals and identifiers untouched
+        }
+        return keywords.has(match.toUpperCase()) ? match.toUpperCase() : match;
+      })
+      .replace(/\`(GROUP|USER|GROUPS)\`/ig, (match, p1) => `\`${p1.toLowerCase()}\``)
       .replace(/\t/g, '  ');
   }
   /**
