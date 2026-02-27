@@ -123,7 +123,7 @@ describe('MysqlDriver', () => {
       });
 
       expect(script).toContain("CREATE USER IF NOT EXISTS 'testuser'@'%'");
-      expect(script).toContain("GRANT SELECT, SHOW VIEW ON `mydb`.*");
+      expect(script).toContain("GRANT SELECT, SHOW VIEW, TRIGGER, EVENT ON `mydb`.*");
       expect(script).toContain("GRANT ALTER, CREATE, DROP, INDEX, REFERENCES ON `mydb`.*");
       expect(script).toContain("GRANT CREATE VIEW ON `mydb`.*");
       expect(script).toContain("GRANT ALTER ROUTINE, CREATE ROUTINE, EXECUTE ON `mydb`.*");
@@ -138,7 +138,7 @@ describe('MysqlDriver', () => {
       });
 
       expect(script).toContain("CREATE USER IF NOT EXISTS 'readonly'@'%'");
-      expect(script).toContain("GRANT SELECT, SHOW VIEW ON `mydb`.*");
+      expect(script).toContain("GRANT SELECT, SHOW VIEW, TRIGGER, EVENT ON `mydb`.*");
       expect(script).not.toContain("GRANT ALTER, CREATE, DROP");
       expect(script).not.toContain("GRANT CREATE VIEW");
       expect(script).not.toContain("GRANT ALTER ROUTINE");

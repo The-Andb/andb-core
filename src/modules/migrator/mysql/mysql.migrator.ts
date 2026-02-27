@@ -117,4 +117,24 @@ export class MysqlMigrator {
 
     return statements;
   }
+
+  /**
+   * Skip rules for migration (Rule #1 parity)
+   * Legacy: isNotMigrateCondition
+   */
+  isNotMigrateCondition(name: string): boolean {
+    const n = name.toLowerCase();
+    if (n.includes('ote_')) return true; // Online Transaction Engine (Skip)
+    if (n.startsWith('pt_')) return true; // Percona Toolkit shadow tables
+    if (n.includes('test')) return true; // Test objects
+    return false;
+  }
+
+  disableForeignKeyChecks(): string {
+    return 'SET FOREIGN_KEY_CHECKS = 0;';
+  }
+
+  enableForeignKeyChecks(): string {
+    return 'SET FOREIGN_KEY_CHECKS = 1;';
+  }
 }

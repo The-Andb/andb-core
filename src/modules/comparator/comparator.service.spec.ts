@@ -5,10 +5,18 @@ import { IIntrospectionService } from '../../common/interfaces/driver.interface'
 describe('ComparatorService', () => {
   let service: ComparatorService;
   let parser: ParserService;
+  const mockStorageService = {
+    getDDLObjects: jest.fn().mockResolvedValue([]),
+    getDDL: jest.fn().mockResolvedValue(''),
+    saveComparison: jest.fn().mockResolvedValue(true),
+  };
+  const mockConfigService = {
+    getDomainNormalization: jest.fn().mockReturnValue({ pattern: /(?!)/, replacement: '' }),
+  };
 
   beforeEach(() => {
     parser = new ParserService();
-    service = new ComparatorService(parser);
+    service = new ComparatorService(parser, mockStorageService, mockConfigService);
   });
 
   describe('compareTables', () => {

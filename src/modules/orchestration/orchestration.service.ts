@@ -158,237 +158,54 @@ export class OrchestrationService {
   }
 
   private async compareSchema(payload: any) {
-    const { srcEnv, destEnv, type = 'tables' } = payload;
-    const ddlType = type.toLowerCase();
+    const { srcEnv, destEnv, type = 'tables', name: specificName } = payload;
 
+    // Rule #1: Compare = OFFLINE. Delegate to ComparatorService which reads from Storage.
     const srcConn = this.configService.getConnection(srcEnv);
     const destConn = this.configService.getConnection(destEnv);
+    const srcDbName = srcConn?.config?.database || 'default';
+    const destDbName = destConn?.config?.database || 'default';
 
-    const srcDriver = await this.driverFactory.create(srcConn.type, srcConn.config);
-    const destDriver = await this.driverFactory.create(destConn.type, destConn.config);
-
-    try {
-      await srcDriver.connect();
-      await destDriver.connect();
-
-      const srcIntro = srcDriver.getIntrospectionService();
-      const destIntro = destDriver.getIntrospectionService();
-      const dbName = srcConn.config.database || 'default';
-      const destDbName = destConn.config.database || 'default';
-
-      const diff = await this.comparator.compareSchema(srcIntro, destIntro, dbName, destDbName);
-      const results: any[] = [];
-
-      if (ddlType === 'tables') {
-        const migrator = destDriver.getMigrator(); // Destination dialect determines generated SQL
-        for (const name of Object.keys(diff.tables)) {
-          const ddl = this.migrator.generateAlterSQL(diff.tables[name], migrator);
-          const result = {
-            name,
-            status: 'different',
-            type: 'TABLES',
-            ddl,
-            diff: {
-              source: await srcIntro.getTableDDL(dbName, name),
-              target: await destIntro.getTableDDL(destDbName, name),
-            },
-          };
-          results.push(result);
-          await this.storageService.saveComparison({
-            srcEnv,
-            destEnv,
-            database: dbName,
-            type: 'TABLES',
-            name,
-            status: result.status,
-            alterStatements: ddl,
-          });
-        }
-        for (const name of diff.droppedTables) {
-          const ddl = [`DROP TABLE IF EXISTS \`${name}\`;`];
-          const result = {
-            name,
-            status: 'missing_in_source',
-            type: 'TABLES',
-            ddl,
-            diff: { source: null, target: await destIntro.getTableDDL(destDbName, name) },
-          };
-          results.push(result);
-          await this.storageService.saveComparison({
-            srcEnv,
-            destEnv,
-            database: dbName,
-            type: 'TABLES',
-            name,
-            status: result.status,
-            alterStatements: ddl,
-          });
-        }
-        const srcTables = await srcIntro.listTables(dbName);
-        const destTables = await destIntro.listTables(destDbName);
-        for (const name of srcTables) {
-          if (!destTables.includes(name) && !diff.tables[name]) {
-            const ddl = await srcIntro.getTableDDL(dbName, name);
-            const result = {
-              name,
-              status: 'missing_in_target',
-              type: 'TABLES',
-              ddl: [ddl],
-              diff: { source: ddl, target: null },
-            };
-            results.push(result);
-            await this.storageService.saveComparison({
-              srcEnv,
-              destEnv,
-              database: dbName,
-              type: 'TABLES',
-              name,
-              status: result.status,
-              alterStatements: [ddl],
-            });
-          }
-        }
-
-        // Add Identical Tables
-        for (const name of srcTables) {
-          if (destTables.includes(name) && !diff.tables[name]) {
-            const ddl = await srcIntro.getTableDDL(dbName, name);
-            const result = {
-              name,
-              status: 'equal',
-              type: 'TABLES',
-              ddl: [],
-              diff: { source: ddl, target: ddl }, // Identical
-            };
-            results.push(result);
-            await this.storageService.saveComparison({
-              srcEnv,
-              destEnv,
-              database: dbName,
-              type: 'TABLES',
-              name,
-              status: 'equal',
-              alterStatements: [],
-            });
-          }
-        }
-      } else {
-        // Generic Objects (Procedures, Functions, Views, Triggers)
-        // 1. Add Diff Items
-        const processedNames = new Set<string>();
-
-        const migrator = destDriver.getMigrator(); // Destination dialect determines generated SQL
-
-        for (const obj of diff.objects) {
-          const typeMatch =
-            obj.type.toLowerCase() + 's' === ddlType ||
-            (ddlType === 'procedures' && obj.type === 'PROCEDURE');
-          if (!typeMatch) continue;
-
-          processedNames.add(obj.name);
-
-          const ddl = this.migrator.generateObjectSQL(obj, migrator);
-          const result = {
-            name: obj.name,
-            status:
-              obj.operation === 'DROP'
-                ? 'missing_in_source'
-                : obj.operation === 'CREATE'
-                  ? 'missing_in_target'
-                  : 'different',
-            type: obj.type + 'S',
-            ddl,
-            diff: {
-              source: obj.operation === 'DROP' ? null : obj.definition,
-              target:
-                obj.operation === 'CREATE'
-                  ? null
-                  : await destIntro.getObjectDDL(destDbName, obj.type, obj.name),
-            },
-          };
-          results.push(result);
-          await this.storageService.saveComparison({
-            srcEnv,
-            destEnv,
-            database: dbName,
-            type: obj.type + 'S',
-            name: obj.name,
-            status: result.status,
-            alterStatements: ddl,
-          });
-        }
-
-        // 2. Add Identical Items
-        // We need to list all objects to find the ones not in diff
-        const singularType = ddlType.replace(/s$/, '').toUpperCase(); // tables -> TABLE (handled above), procedures -> PROCEDURE
-        // Map common plurals to singular
-        let listType = singularType;
-        if (ddlType === 'procedures') listType = 'PROCEDURE';
-        if (ddlType === 'functions') listType = 'FUNCTION';
-        if (ddlType === 'views') listType = 'VIEW';
-        if (ddlType === 'triggers') listType = 'TRIGGER';
-        if (ddlType === 'events') listType = 'EVENT';
-
-        // Helper to get list
-        const getList = async (intro: any) => {
-          if (listType === 'PROCEDURE') return intro.listProcedures(dbName);
-          if (listType === 'FUNCTION') return intro.listFunctions(dbName);
-          if (listType === 'VIEW') return intro.listViews(dbName);
-          if (listType === 'TRIGGER') return intro.listTriggers(dbName);
-          return [];
-        };
-
-        const srcObjList = await getList(srcIntro);
-        const destObjList = await getList(destIntro);
-
-        for (const name of srcObjList) {
-          if (destObjList.includes(name) && !processedNames.has(name)) {
-            // Identical
-            const ddl = await destIntro.getObjectDDL(destDbName, listType, name);
-            const result = {
-              name,
-              status: 'equal',
-              type: listType + 'S',
-              ddl: [],
-              diff: { source: ddl, target: ddl },
-            };
-            results.push(result);
-            await this.storageService.saveComparison({
-              srcEnv,
-              destEnv,
-              database: dbName,
-              type: listType + 'S',
-              name,
-              status: 'equal',
-              alterStatements: [],
-            });
-          }
-        }
-      }
-
-      return results;
-    } finally {
-      await srcDriver.disconnect();
-      await destDriver.disconnect();
-    }
+    return this.comparator.compareFromStorage(
+      srcEnv, destEnv, srcDbName, destDbName, type, specificName,
+    );
   }
 
   private async migrateSchema(payload: any) {
     const { srcEnv, destEnv, objects } = payload;
     const destConn = this.configService.getConnection(destEnv);
-    const destDriver = await this.driverFactory.create(destConn.type, destConn.config);
+
+    // Static SQL Dump Guard (Rule #1 parity)
+    if (destEnv.toLowerCase().endsWith('.sql')) {
+      throw new Error(`Migration safety: Cannot execute migration into a static SQL file "${destEnv}".`);
+    }
 
     const successful: any[] = [];
     const failed: any[] = [];
-
     const autoBackup = this.configService.getAutoBackup();
     const dbName = destConn.config.database || 'default';
+    const isExperimental = process.env.EXPERIMENTAL === '1';
+
+    if (isExperimental) {
+      this.logger.warn('🧪 EXPERIMENTAL MODE ACTIVE: Proceeding with potentially unsafe migrations.');
+    }
+
+    const destDriver = await this.driverFactory.create(destConn.type, destConn.config);
 
     try {
       await destDriver.connect();
       const destIntro = destDriver.getIntrospectionService();
 
+      // Disable Foreign Key Checks (Rule #1 parity)
+      await destDriver.query(this.migrator.disableForeignKeyChecks());
+
       for (const obj of objects) {
+        // Skip Condition (Rule #1 parity)
+        if (this.migrator.isNotMigrateCondition(obj.name)) {
+          this.logger.log(`Skipping restricted object: ${obj.name}`);
+          continue;
+        }
+
         // Auto-backup before destructive/update operations
         if (
           autoBackup &&
@@ -417,12 +234,9 @@ export class OrchestrationService {
         }
 
         try {
-          if (Array.isArray(obj.ddl)) {
-            for (const statement of obj.ddl) {
-              await destDriver.query(statement);
-            }
-          } else {
-            await destDriver.query(obj.ddl);
+          const statements = Array.isArray(obj.ddl) ? obj.ddl : [obj.ddl];
+          for (const statement of statements) {
+            if (statement) await destDriver.query(statement);
           }
           successful.push(obj);
           await this.storageService.saveMigration({
@@ -446,12 +260,41 @@ export class OrchestrationService {
             status: 'FAILED',
             error: err.message,
           });
+          this.logger.error(`Migration failed for ${obj.name}: ${err.message}`);
         }
       }
+
+      // Re-enable Foreign Key Checks (Rule #1 parity)
+      await destDriver.query(this.migrator.enableForeignKeyChecks());
+
       return { success: true, successful, failed };
     } finally {
       await destDriver.disconnect();
     }
+  }
+
+  /**
+   * isTableExists (Legacy parity)
+   */
+  async isTableExists(env: string, tableName: string): Promise<boolean> {
+    const conn = this.configService.getConnection(env);
+    const driver = await this.driverFactory.create(conn.type, conn.config);
+    try {
+      await driver.connect();
+      const intro = driver.getIntrospectionService();
+      const tables = await intro.listTables(conn.config.database || 'default');
+      return tables.includes(tableName);
+    } finally {
+      await driver.disconnect();
+    }
+  }
+
+  private getBackupFolder(env: string, db: string): string {
+    const folder = `db/backups/${env}/${db}`;
+    if (!fs.existsSync(folder)) {
+      fs.mkdirSync(folder, { recursive: true });
+    }
+    return folder;
   }
 
   private async setupRestrictedUser(payload: any) {

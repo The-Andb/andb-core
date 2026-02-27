@@ -86,7 +86,7 @@ describe('OrchestrationService', () => {
       const payload = { env: 'DEV' };
       exporter.exportSchema.mockResolvedValue('exported');
       const result = await service.execute('export', payload);
-      expect(exporter.exportSchema).toHaveBeenCalledWith('DEV', null);
+      expect(exporter.exportSchema).toHaveBeenCalledWith('DEV', null, null);
       expect(result).toBe('exported');
     });
 
@@ -119,42 +119,15 @@ describe('OrchestrationService', () => {
   });
 
   describe('compareSchema', () => {
-    it('should return identical tables with status equal', async () => {
-      // Mock Drivers
-      const mockIntro = {
-        listTables: jest.fn(),
-        getTableDDL: jest.fn(),
-        listProcedures: jest.fn().mockResolvedValue([]),
-        listFunctions: jest.fn().mockResolvedValue([]),
-        listViews: jest.fn().mockResolvedValue([]),
-        listTriggers: jest.fn().mockResolvedValue([]),
-        listEvents: jest.fn().mockResolvedValue([]),
-      };
-      const mockDriver = {
-        connect: jest.fn(),
-        disconnect: jest.fn(),
-        getIntrospectionService: jest.fn().mockReturnValue(mockIntro),
-        getMigrator: jest.fn(), // We provide the mockMigrator via the module scope anyway, but we still need the stub
-      };
-      driverFactory.create.mockResolvedValue(mockDriver);
+    it('should delegate to comparator.compareFromStorage (offline from SQLite)', async () => {
+      // Mock Config (needed for database name lookup)
+      configService.getConnection.mockReturnValue({ type: 'mysql', config: { database: 'testdb' } });
 
-      // Mock Config
-      configService.getConnection.mockReturnValue({ type: 'mysql', config: {} });
-
-      // Mock Comparator (Returns EMPTY diff)
-      comparator.compareSchema.mockResolvedValue({
-        tables: {},
-        droppedTables: [],
-        objects: [],
-        summary: { totalChanges: 0, tablesChanged: 0, objectsChanged: 0 }
-      });
-
-      // Mock Introspection (Identical tables exist)
-      mockIntro.listTables.mockResolvedValue(['users']);
-      mockIntro.getTableDDL.mockResolvedValue('CREATE TABLE users ...');
-
-      // Mock Storage
-      storageService.saveComparison = jest.fn();
+      // Mock Comparator — compareFromStorage returns results from storage
+      const mockResults = [
+        { name: 'users', status: 'equal', type: 'TABLES', ddl: [], diff: { source: 'CREATE TABLE...', target: 'CREATE TABLE...' } },
+      ];
+      comparator.compareFromStorage = jest.fn().mockResolvedValue(mockResults);
 
       const payload = {
         srcEnv: 'DEV',
@@ -164,13 +137,20 @@ describe('OrchestrationService', () => {
 
       const result = await service.execute('compare', payload);
 
-      // Assertions covering the "Big Missing" bug
+      // Assertions
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual(expect.objectContaining({
         name: 'users',
         status: 'equal',
         type: 'TABLES'
       }));
+
+      // Verify Comparator.compareFromStorage was called with correct args
+      expect(comparator.compareFromStorage).toHaveBeenCalledWith(
+        'DEV', 'STAGE', 'testdb', 'testdb', 'tables', undefined,
+      );
+      // Verify NO driver connections were made
+      expect(driverFactory.create).not.toHaveBeenCalled();
     });
   });
 });

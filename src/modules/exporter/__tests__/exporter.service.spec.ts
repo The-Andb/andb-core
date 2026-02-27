@@ -93,11 +93,11 @@ describe('ExporterService', () => {
       expect(fs.mkdirSync).toHaveBeenCalled();
     });
 
-    it('should skip writing DDL to file if DDL is empty', async () => {
+    it('should write empty DDL to file for consistency (parity fix)', async () => {
       mockIntrospection.getTableDDL.mockResolvedValue('');
       await service.exportSchema('dev');
-      expect(fs.writeFileSync).not.toHaveBeenCalledWith(
-        expect.stringContaining('users.sql'), expect.anything(),
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('users.sql'), '',
       );
     });
 

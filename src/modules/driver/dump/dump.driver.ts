@@ -33,14 +33,6 @@ export class DumpDriver implements IDatabaseDriver {
 
   async connect(): Promise<void> {
     // DumpPath is usually passed via host or a specific field if we extended the interface
-    // Ideally IDatabaseConfig should have extra fields, but for now we look at 'host' or 'database' as path
-    // if type is "dump".
-    // Wait, the factory decides.
-    // Let's assume config.host contains the path for now or we add a property.
-    // Core legacy used `config.dumpPath || config.host`.
-
-    // Check if IDatabaseDriver has arbitrary props? It is strict.
-    // We will cast config for now or assume host is the path.
     const dumpPath = (this.config as any).path || this.config.host || this.config.database;
 
     if (!dumpPath) {
@@ -57,12 +49,29 @@ export class DumpDriver implements IDatabaseDriver {
     }
 
     this.logger.log(`Parsing dump file: ${resolvedPath}`);
-    // Check if file is too big? 2MB is fine.
     const content = fs.readFileSync(resolvedPath, 'utf8');
     this._parseDump(content);
 
     const count = this.data.TABLES.size;
     this.logger.log(`Parsed ${count} tables from dump.`);
+  }
+
+  /**
+   * Load DDLs from storage data (SQLite) instead of reading from filesystem.
+   * Used by offline compare flow (Rule #1: Compare = OFFLINE).
+   * @param ddlObjects Array of { name, content } for a specific DDL type
+   * @param ddlType Uppercase plural type: 'TABLES', 'PROCEDURES', etc.
+   */
+  loadFromStorage(ddlObjects: Array<{ name: string; content: string }>, ddlType: string) {
+    const type = ddlType.toUpperCase();
+    if (!this.data[type]) {
+      this.data[type] = new Map();
+    }
+    for (const obj of ddlObjects) {
+      if (obj.name && obj.content) {
+        this.data[type].set(obj.name, obj.content);
+      }
+    }
   }
 
   async disconnect(): Promise<void> {
