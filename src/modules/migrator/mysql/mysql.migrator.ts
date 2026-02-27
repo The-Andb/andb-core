@@ -104,15 +104,20 @@ export class MysqlMigrator {
       });
     }
 
+    const formatAlterTable = (alterClauses: string[]) => {
+      if (alterClauses.length === 1) {
+        return `ALTER TABLE \`${tableName}\`\n  ${alterClauses[0]};`;
+      }
+      return `ALTER TABLE \`${tableName}\`\n  ${alterClauses[0]}\n  , ${alterClauses.slice(1).join('\n  , ')};`;
+    };
+
     if (clauses.length > 0) {
-      const sql = `ALTER TABLE \`${tableName}\` ${clauses.join(', ')};`;
-      statements.push(sql);
+      statements.push(formatAlterTable(clauses));
     }
 
     // Second ALTER for FK adds (only when modifying FKs)
     if (addFkClauses.length > 0) {
-      const sql = `ALTER TABLE \`${tableName}\` ${addFkClauses.join(', ')};`;
-      statements.push(sql);
+      statements.push(formatAlterTable(addFkClauses));
     }
 
     return statements;

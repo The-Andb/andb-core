@@ -51,11 +51,15 @@ describe('ExporterService', () => {
       saveDDL: jest.fn().mockResolvedValue(undefined),
     };
 
+    const mockParserService = {
+      uppercaseKeywords: jest.fn().mockImplementation((s) => s),
+    };
+
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
     (fs.writeFileSync as jest.Mock).mockReturnValue(undefined);
 
-    service = new ExporterService(driverFactory, configService, storageService);
+    service = new ExporterService(driverFactory, configService, storageService, mockParserService as any);
   });
 
   afterEach(() => {

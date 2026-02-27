@@ -40,7 +40,7 @@ describe('MigratorService', () => {
       };
 
       const sqls = service.generateSchemaSQL(schemaDiff, defaultMigrator);
-      expect(sqls[0]).toContain('ALTER TABLE `users` ADD COLUMN `age` int AFTER id');
+      expect(sqls[0]).toContain('ALTER TABLE `users`\n  ADD COLUMN `age` int AFTER id');
     });
 
     it('should handle generic object lifecycle (DROP before CREATE)', () => {

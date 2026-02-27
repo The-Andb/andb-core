@@ -21,7 +21,7 @@ describe('MysqlMigrator', () => {
 
       const sqls = migrator.generateTableAlterSQL(diff);
       expect(sqls.length).toBe(1);
-      expect(sqls[0]).toBe('ALTER TABLE `users` DROP COLUMN `old_col`, ADD COLUMN `age` int;');
+      expect(sqls[0]).toBe('ALTER TABLE `users`\n  DROP COLUMN `old_col`\n  , ADD COLUMN `age` int;');
     });
 
     it('should split ALTER TABLE when modifying a foreign key with same name', () => {
@@ -36,8 +36,8 @@ describe('MysqlMigrator', () => {
 
       const sqls = migrator.generateTableAlterSQL(diff);
       expect(sqls.length).toBe(2);
-      expect(sqls[0]).toBe('ALTER TABLE `users` DROP FOREIGN KEY `fk_role`;');
-      expect(sqls[1]).toBe('ALTER TABLE `users` ADD CONSTRAINT `fk_role` FOREIGN KEY (`r_id`) REFERENCES roles(`id`);');
+      expect(sqls[0]).toBe('ALTER TABLE `users`\n  DROP FOREIGN KEY `fk_role`;');
+      expect(sqls[1]).toBe('ALTER TABLE `users`\n  ADD CONSTRAINT `fk_role` FOREIGN KEY (`r_id`) REFERENCES roles(`id`);');
     });
 
     it('should handle primary key drop and add', () => {
@@ -51,7 +51,7 @@ describe('MysqlMigrator', () => {
       };
 
       const sqls = migrator.generateTableAlterSQL(diff);
-      expect(sqls[0]).toBe('ALTER TABLE `users` DROP PRIMARY KEY, ADD PRIMARY KEY (`new_id`);');
+      expect(sqls[0]).toBe('ALTER TABLE `users`\n  DROP PRIMARY KEY\n  , ADD PRIMARY KEY (`new_id`);');
     });
   });
 
