@@ -1,11 +1,11 @@
 import { Client } from 'ssh2';
-import { Logger } from '@nestjs/common';
+const { getLogger } = require('andb-logger');
 import { ISshConfig } from '../../common/interfaces/connection.interface';
 import { Readable, Writable } from 'stream';
 
 export class SshTunnel {
   private client: Client;
-  private logger = new Logger('SshTunnel');
+  private logger = getLogger({ logName: 'SshTunnel' });
   private connection: any; // Keep track of the active connection if needed
 
   constructor(private readonly config: ISshConfig) {
@@ -18,7 +18,7 @@ export class SshTunnel {
   async forward(destHost: string, destPort: number): Promise<NodeJS.ReadWriteStream> {
     return new Promise((resolve, reject) => {
       this.client.on('ready', () => {
-        this.logger.log(`SSH Connection Ready. Forwarding to ${destHost}:${destPort}`);
+        this.logger.info(`SSH Connection Ready. Forwarding to ${destHost}:${destPort}`);
 
         this.client.forwardOut(
           '127.0.0.1',

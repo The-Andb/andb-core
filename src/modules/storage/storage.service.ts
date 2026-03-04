@@ -1,24 +1,13 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+const { getLogger } = require('andb-logger');
 import Database = require('better-sqlite3');
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 
-@Injectable()
-export class StorageService implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(StorageService.name);
+export class StorageService {
+  private readonly logger = getLogger({ logName: 'StorageService' });
   private db: Database.Database | null = null;
   private dbPath: string = '';
-
-  onModuleInit() {
-    // We will initialize when setDbPath is called or use a default
-    const defaultPath = path.join(process.cwd(), 'andb-storage.db');
-    this.initialize(defaultPath);
-  }
-
-  onModuleDestroy() {
-    this.close();
-  }
 
   initialize(dbPath: string) {
     if (this.db) {
@@ -33,7 +22,7 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (!process.env.ANDB_QUIET) {
-      this.logger.log(`Initializing SQLite storage at: ${dbPath}`);
+      this.logger.info(`Initializing SQLite storage at: ${dbPath}`);
     }
     this.db = new Database(dbPath);
     this._initSchema();

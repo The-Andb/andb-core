@@ -103,6 +103,19 @@ describe('MysqlIntrospectionService', () => {
       expect(ddl).not.toContain('AUTO_INCREMENT=10');
     });
 
+    it('should sort non-primary keys alphabetically to normalize DDL', async () => {
+      mockDriver.query.mockResolvedValue([{
+        'Create Table': 'CREATE TABLE `users` (\n  `id` int(11) NOT NULL,\n  `email` varchar(255) NOT NULL,\n  `age` int(11) NOT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_email` (`email`),\n  KEY `idx_age` (`age`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+      }]);
+      const ddl = await service.getTableDDL('db', 'users');
+      // idx_age should come before idx_email
+      const ageIndex = ddl.indexOf('`idx_age`');
+      const emailIndex = ddl.indexOf('`idx_email`');
+      expect(ageIndex).toBeGreaterThan(0);
+      expect(emailIndex).toBeGreaterThan(0);
+      expect(ageIndex).toBeLessThan(emailIndex);
+    });
+
     it('should return empty string if it is a view', async () => {
       mockDriver.query.mockResolvedValue([{
         'Create View': 'CREATE VIEW ...'

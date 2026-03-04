@@ -1,6 +1,4 @@
-import { Injectable } from '@nestjs/common';
 
-@Injectable()
 export class ParserService {
   /**
    * Remove DEFINER clause from DDL
@@ -384,8 +382,6 @@ export class ParserService {
           if (line.includes('CONSTRAINT')) {
             const constraintNameMatch = line.match(/CONSTRAINT\s+`([^`]+)`/);
             if (constraintNameMatch && constraintNameMatch.length >= 2) {
-              // Usually the trailing comma needs to be trimmed, but for now we just trim whitespace
-              // The logic further down or here expects line.trim()
               foreignKeys[constraintNameMatch[1]] = line.trim();
             }
           } else {
@@ -393,7 +389,6 @@ export class ParserService {
             if (indexNameMatch && indexNameMatch.length >= 2) {
               const indexName = indexNameMatch[1];
               if (line.includes('PRIMARY KEY')) {
-                // PK doesn't necessarily have a name in MySQL DDL usually, but if referenced by name
                 primaryKey.push(indexName);
               } else {
                 indexes[indexName] = line.trim();
@@ -429,8 +424,176 @@ export class ParserService {
         foreignKeys,
       };
     } catch (error) {
-      // Silent fail or log? Core shouldn't log by default, maybe throw?
-      // Legacy returned null.
+      return null;
+    }
+  }
+
+  /**
+   * Parse CREATE TABLE statement into rich structured components for UI visualization
+   */
+  parseTableDetailed(tableSQL: string): {
+    tableName: string;
+    columns: any[];
+    indexes: any[];
+    foreignKeys: any[];
+    options: any;
+    partitions: string | null;
+  } | null {
+    try {
+      if (!tableSQL || !tableSQL.toUpperCase().includes('CREATE TABLE')) return null;
+
+      const tableNameMatch = tableSQL.match(/CREATE TABLE\s+`?([^`\s(]+)`?/i);
+      if (!tableNameMatch) return null;
+      const tableName = tableNameMatch[1];
+
+      // Find the first '(' and the last ')' to extract the body
+      const firstParen = tableSQL.indexOf('(');
+      const lastParen = tableSQL.lastIndexOf(')');
+      if (firstParen === -1 || lastParen === -1) return null;
+      const body = tableSQL.substring(firstParen + 1, lastParen);
+
+      const lines: string[] = [];
+      let current = '';
+      let parenLevel = 0;
+      let inQuote = false;
+      let quoteChar = '';
+
+      for (let i = 0; i < body.length; i++) {
+        const char = body[i];
+        if (inQuote) {
+          current += char;
+          if (char === quoteChar && body[i - 1] !== '\\') inQuote = false;
+        } else {
+          if (char === "'" || char === '"' || char === '`') {
+            inQuote = true;
+            quoteChar = char;
+            current += char;
+          } else if (char === '(') {
+            parenLevel++;
+            current += char;
+          } else if (char === ')') {
+            parenLevel--;
+            current += char;
+          } else if (char === ',' && parenLevel === 0) {
+            lines.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+      }
+      if (current.trim()) lines.push(current.trim());
+
+      const columns: any[] = [];
+      const indexes: any[] = [];
+      const foreignKeys: any[] = [];
+      const pkColumns = new Set<string>();
+
+      for (const line of lines) {
+        if (!line) continue;
+        const up = line.toUpperCase();
+
+        if (up.startsWith('PRIMARY KEY')) {
+          const match = line.match(/PRIMARY KEY\s*\((.*?)\)/i);
+          if (match) {
+            match[1].split(',').forEach((c) => pkColumns.add(c.trim().replace(/[`"]/g, '')));
+            indexes.push({
+              name: 'PRIMARY',
+              type: 'PRIMARY KEY',
+              columns: match[1].trim(),
+              definition: line,
+            });
+          }
+          continue;
+        }
+
+        if (up.startsWith('CONSTRAINT') && up.includes('FOREIGN KEY')) {
+          const nameMatch = line.match(/CONSTRAINT\s+`?([^`\s]+)`?/i);
+          const fkMatch = line.match(/FOREIGN KEY\s*\((.*?)\)\s+REFERENCES\s+`?([^`\s(]+)`?\s*\((.*?)\)/i);
+          if (fkMatch) {
+            foreignKeys.push({
+              name: nameMatch ? nameMatch[1] : 'FK_anonymous',
+              localColumns: fkMatch[1].trim(),
+              referencedTable: fkMatch[2].trim(),
+              referencedColumns: fkMatch[3].trim(),
+              definition: line,
+            });
+          }
+          continue;
+        }
+
+        if (up.startsWith('KEY') || up.startsWith('INDEX') || up.startsWith('UNIQUE KEY')) {
+          const type = up.startsWith('UNIQUE') ? 'UNIQUE' : 'INDEX';
+          const nameMatch = line.match(/(?:KEY|INDEX)\s+`?([^`\s(]+)`?/i);
+          const colMatch = line.match(/\((.*?)\)/);
+          indexes.push({
+            name: nameMatch ? nameMatch[1] : 'anonymous',
+            type,
+            columns: colMatch ? colMatch[1].trim() : '',
+            definition: line,
+          });
+          continue;
+        }
+
+        const colNameMatch = line.match(/^`?([^`\s]+)`?\s+([a-zA-Z0-9_().,'"\s]+)/i);
+        if (colNameMatch) {
+          const name = colNameMatch[1];
+          let fullType = colNameMatch[2].trim();
+
+          const isPk = pkColumns.has(name) || up.includes('PRIMARY KEY');
+          const isNotNull = up.includes('NOT NULL');
+          const isUnsigned = up.includes('UNSIGNED');
+          const isAutoInc = up.includes('AUTO_INCREMENT');
+          const isUnique = up.includes('UNIQUE');
+
+          let defVal = null;
+          const defMatch = line.match(/DEFAULT\s+('([^']*)'|([^,\s]+))/i);
+          if (defMatch) defVal = defMatch[2] || defMatch[3];
+
+          let comment = '';
+          const commentMatch = line.match(/COMMENT\s+'([^']*)'/i);
+          if (commentMatch) comment = commentMatch[1];
+
+          columns.push({
+            name,
+            type: fullType.split(' ')[0],
+            pk: isPk,
+            notNull: isNotNull,
+            unique: isUnique,
+            unsigned: isUnsigned,
+            autoIncrement: isAutoInc,
+            default: defVal,
+            comment,
+            definition: line,
+          });
+        }
+      }
+
+      const options: any = {};
+      const engineMatch = tableSQL.match(/ENGINE=([^`\s;]+)/i);
+      if (engineMatch) options.engine = engineMatch[1];
+
+      const charsetMatch = tableSQL.match(/(?:DEFAULT\s+)?CHARSET=([^`\s;]+)/i) || tableSQL.match(/CHARACTER\s+SET\s+([^`\s;]+)/i);
+      if (charsetMatch) options.charset = charsetMatch[1];
+
+      const collationMatch = tableSQL.match(/COLLATE=([^`\s;]+)/i);
+      if (collationMatch) options.collation = collationMatch[1];
+
+      const tableCommentMatch = tableSQL.match(/COMMENT='([^']*)'/i);
+      if (tableCommentMatch) options.comment = tableCommentMatch[1];
+
+      const partitionsMatch = tableSQL.match(/PARTITION BY.*$/is);
+      const partitions = partitionsMatch ? partitionsMatch[0].trim() : null;
+
+      return {
+        tableName,
+        columns,
+        indexes,
+        foreignKeys,
+        options,
+        partitions,
+      };
+    } catch (e) {
       return null;
     }
   }
@@ -455,9 +618,9 @@ export class ParserService {
       }
 
       const triggerName = triggerNameMatch[1];
-      const timing = triggerNameLine?.match(/(BEFORE|AFTER)/)?.[1] || '';
-      const event = triggerNameLine?.match(/(INSERT|UPDATE|DELETE)/)?.[1] || '';
-      const tableName = triggerNameLine?.match(/ON\s+`([^`]+)`/)?.[1] || '';
+      const timing = triggerNameLine?.match(/(BEFORE|AFTER)/i)?.[1] || '';
+      const event = triggerNameLine?.match(/(INSERT|UPDATE|DELETE)/i)?.[1] || '';
+      const tableName = triggerNameLine?.match(/ON\s+`([^`]+)`/i)?.[1] || '';
 
       return {
         triggerName,

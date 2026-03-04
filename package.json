@@ -1,18 +1,18 @@
 {
   "name": "@the-andb/core",
-  "version": "0.0.1",
-  "description": "The Andb Core Engine - Rebuilt with NestJS",
+  "version": "1.0.0-beta.1",
+  "description": "The Andb Core Engine - Lightweight, Framework-Free",
   "author": "The Andb (ph4n4n)",
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "SEE LICENSE IN ../LICENSE",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "ts-node src/index.ts",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:dev": "ts-node --watch src/index.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -54,9 +54,6 @@
     "compare:prod": "npm run export:dev && npm run export:prod && npm run compare:prod:off"
   },
   "dependencies": {
-    "@nestjs/common": "^10.0.0",
-    "@nestjs/core": "^10.0.0",
-    "@nestjs/platform-express": "^10.0.0",
     "andb-logger": "^1.0.3",
     "better-sqlite3": "^12.4.6",
     "commander": "^11.1.0",
@@ -64,14 +61,10 @@
     "dotenv": "^17.2.3",
     "js-yaml": "^4.1.1",
     "mysql2": "^3.14.3",
-    "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.1",
+    "simple-git": "^3.32.3",
     "ssh2": "^1.15.0"
   },
   "devDependencies": {
-    "@nestjs/cli": "^10.0.0",
-    "@nestjs/schematics": "^10.0.0",
-    "@nestjs/testing": "^10.0.0",
     "@types/better-sqlite3": "^7.6.0",
     "@types/diff": "^5.0.0",
     "@types/express": "^4.17.17",

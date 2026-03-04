@@ -11,13 +11,13 @@ import { MysqlMonitoringService } from './mysql.monitoring';
 import { MysqlMigrator } from '../../migrator/mysql/mysql.migrator';
 import { SshTunnel } from '../ssh-tunnel';
 import * as mysql from 'mysql2/promise'; // Use promise wrapper natively
-import { Logger } from '@nestjs/common';
+const { getLogger } = require('andb-logger');
 import { ParserService } from '../../parser/parser.service'; // We need this for Introspection
 
 export class MysqlDriver implements IDatabaseDriver {
   private connection: mysql.Connection | null = null;
   private sshTunnel: SshTunnel | null = null;
-  private readonly logger = new Logger(MysqlDriver.name);
+  private readonly logger = getLogger({ logName: 'MysqlDriver' });
 
   // Cache services
   private introspectionService?: IIntrospectionService;
@@ -35,7 +35,7 @@ export class MysqlDriver implements IDatabaseDriver {
 
       // Handle SSH Tunneling — only if sshConfig has a valid host
       if (this.config.sshConfig && this.config.sshConfig.host) {
-        this.logger.log(`Initializing SSH Tunnel to ${this.config.sshConfig.host}...`);
+        this.logger.info(`Initializing SSH Tunnel to ${this.config.sshConfig.host}...`);
         this.sshTunnel = new SshTunnel(this.config.sshConfig as ISshConfig);
 
         // Connect SSH and forward to DB host/port
@@ -62,7 +62,7 @@ export class MysqlDriver implements IDatabaseDriver {
       );
       await this.connection.query("SET NAMES 'utf8mb4'");
 
-      this.logger.log(
+      this.logger.info(
         `Connected to MySQL at ${this.config.host} ${this.sshTunnel ? '(via SSH)' : ''}`,
       );
     } catch (err: unknown) {
@@ -170,16 +170,15 @@ export class MysqlDriver implements IDatabaseDriver {
     sql += `-- Reset: Remove all existing privileges (supports re-configuration & downgrade)\n`;
     sql += `REVOKE ALL PRIVILEGES ON \`${safeDb}\`.* FROM '${safeUser}'@'${safeHost}';\n\n`;
 
-    sql += `-- READ Permissions (Required)\n`;
-    sql += `-- SELECT: read table/view data and information_schema\n`;
-    sql += `-- SHOW VIEW: read view definitions via SHOW CREATE VIEW\n`;
-    sql += `-- TRIGGER: read trigger definitions via SHOW CREATE TRIGGER\n`;
-    sql += `-- EVENT: read event definitions via SHOW CREATE EVENT\n`;
-    sql += `GRANT SELECT, SHOW VIEW, TRIGGER, EVENT ON \`${safeDb}\`.* TO '${safeUser}'@'${safeHost}';\n\n`;
+    sql += `-- SELECT, SHOW VIEW, TRIGGER, EVENT: READ permissions\n`;
+    sql += `GRANT SELECT ON \`${safeDb}\`.* TO '${safeUser}'@'${safeHost}';\n`;
+    sql += `GRANT SHOW VIEW ON \`${safeDb}\`.* TO '${safeUser}'@'${safeHost}';\n`;
+    sql += `GRANT TRIGGER ON \`${safeDb}\`.* TO '${safeUser}'@'${safeHost}';\n`;
+    sql += `GRANT EVENT ON \`${safeDb}\`.* TO '${safeUser}'@'${safeHost}';\n\n`;
 
     sql += `-- Global READ Permissions (Required for metadata access)\n`;
-    sql += `-- SHOW_ROUTINE: read procedure/function bodies via SHOW CREATE PROCEDURE/FUNCTION (MySQL 8.0.20+)\n`;
-    sql += `GRANT SHOW_ROUTINE ON *.* TO '${safeUser}'@'${safeHost}';\n\n`;
+    sql += `-- GRANT SELECT ON mysql.proc: read procedure/function bodies (Legacy/Compatibility)\n`;
+    sql += `GRANT SELECT ON mysql.proc TO '${safeUser}'@'${safeHost}';\n\n`;
 
     if (permissions.writeAlter) {
       sql += `-- Group: WRITE - DDL Operations\n`;
@@ -197,6 +196,7 @@ export class MysqlDriver implements IDatabaseDriver {
     }
 
     sql += `FLUSH PRIVILEGES;`;
+    console.log('[MysqlDriver] Generated Script:\n', sql);
     return sql;
   }
 }

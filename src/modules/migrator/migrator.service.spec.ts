@@ -84,18 +84,35 @@ describe('MigratorService', () => {
     });
   });
 
-  describe('generateObjectSQL', () => {
-    it('should delegate to migrator.generateObjectSQL', () => {
-      const diff: IObjectDiff = {
-        type: 'PROCEDURE',
-        name: 'my_proc',
-        operation: 'CREATE',
-        definition: 'CREATE PROCEDURE my_proc() BEGIN END'
-      };
+  describe('Safety Analysis', () => {
+    it('should classify DROP TABLE as CRITICAL', () => {
+      expect(service.getSafetyLevel('DROP TABLE users')).toBe('CRITICAL');
+      expect(service.getSafetyLevel('truncate table logs')).toBe('CRITICAL');
+    });
 
-      const sqls = service.generateObjectSQL(diff, defaultMigrator);
-      expect(sqls.length).toBe(1);
-      expect(sqls[0]).toContain('CREATE PROCEDURE my_proc');
+    it('should classify DROP COLUMN/MODIFY as WARNING', () => {
+      expect(service.getSafetyLevel('ALTER TABLE users DROP COLUMN age')).toBe('WARNING');
+      expect(service.getSafetyLevel('ALTER TABLE users MODIFY COLUMN name varchar(255)')).toBe('WARNING');
+    });
+
+    it('should classify ADD COLUMN as SAFE', () => {
+      expect(service.getSafetyLevel('ALTER TABLE users ADD COLUMN age int')).toBe('SAFE');
+      expect(service.getSafetyLevel('CREATE TABLE new_table (id int)')).toBe('SAFE');
+    });
+
+    it('should generate a structured safety report', () => {
+      const statements = [
+        'CREATE TABLE test (id int)',
+        'ALTER TABLE users DROP COLUMN age',
+        'DROP TABLE legacy_data'
+      ];
+      const report = service.getSafetyReport(statements);
+
+      expect(report.level).toBe('CRITICAL');
+      expect(report.summary.critical).toHaveLength(1);
+      expect(report.summary.warning).toHaveLength(1);
+      expect(report.summary.safe).toHaveLength(1);
+      expect(report.hasDestructive).toBe(true);
     });
   });
 });

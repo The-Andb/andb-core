@@ -92,20 +92,36 @@ export interface IEventDefinition {
   onCompletion?: 'PRESERVE' | 'NOT PRESERVE';
 }
 
+export enum SafetyLevel {
+  SAFE = 'SAFE',
+  WARNING = 'WARNING',
+  CRITICAL = 'CRITICAL',
+}
+
+export interface ISafetyReport {
+  level: SafetyLevel;
+  summary: {
+    safe: string[];
+    warning: string[];
+    critical: string[];
+  };
+  hasDestructive: boolean;
+}
+
 // Diff related
 export interface IDiffOperation {
   type: 'ADD' | 'DROP' | 'MODIFY' | 'CHANGE';
   target:
-    | 'TABLE'
-    | 'COLUMN'
-    | 'INDEX'
-    | 'FOREIGN_KEY'
-    | 'OPTION'
-    | 'TRIGGER'
-    | 'VIEW'
-    | 'PROCEDURE'
-    | 'FUNCTION'
-    | 'EVENT';
+  | 'TABLE'
+  | 'COLUMN'
+  | 'INDEX'
+  | 'FOREIGN_KEY'
+  | 'OPTION'
+  | 'TRIGGER'
+  | 'VIEW'
+  | 'PROCEDURE'
+  | 'FUNCTION'
+  | 'EVENT';
   name: string;
   tableName?: string;
   definition?: string;

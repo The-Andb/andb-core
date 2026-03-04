@@ -1,56 +1,30 @@
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import {
-  ANDB_ORCHESTRATOR,
-  STORAGE_SERVICE,
-  EXPORTER_SERVICE,
-  COMPARATOR_SERVICE,
-  MIGRATOR_SERVICE,
-  PROJECT_CONFIG_SERVICE,
-} from './common/constants/tokens';
+import { Container } from './container';
+import { ParserService } from './modules/parser/parser.service';
 
 export class CoreBridge {
-  private static app: any = null;
-  private static orchestrator: any = null;
-  private static storage: any = null;
-  private static config: any = null;
-  private static services: any = {};
+  private static container: Container | null = null;
   private static initPromise: Promise<any> | null = null;
 
   /**
    * Initialize the Core Engine (Singleton with Lock)
    */
   public static async init(userDataPath?: string) {
-    if (this.app) return this.app;
+    if (this.container) return this.container;
 
     if (this.initPromise) {
       return this.initPromise;
     }
 
     this.initPromise = (async () => {
-      console.log('🚀 [CoreBridge] Initializing NestJS Engine...');
-      this.app = await NestFactory.createApplicationContext(AppModule, {
-        logger: ['error', 'warn'],
-      });
+      console.log('🚀 [CoreBridge] Initializing Engine...');
+      const path = require('path');
+      const dbPath = userDataPath
+        ? path.join(userDataPath, 'andb-storage.db')
+        : undefined;
 
-      this.orchestrator = this.app.get(ANDB_ORCHESTRATOR);
-      this.storage = this.app.get(STORAGE_SERVICE);
-      this.config = this.app.get(PROJECT_CONFIG_SERVICE);
-
-      // Services for legacy compatibility
-      this.services = {
-        exporter: this.app.get(EXPORTER_SERVICE),
-        comparator: this.app.get(COMPARATOR_SERVICE),
-        migrator: this.app.get(MIGRATOR_SERVICE),
-      };
-
-      if (userDataPath) {
-        const path = require('path');
-        const dbPath = path.join(userDataPath, 'andb-storage.db');
-        this.storage.initialize(dbPath);
-      }
+      this.container = Container.create(dbPath);
       console.log('✅ [CoreBridge] Engine Ready.');
-      return this.app;
+      return this.container;
     })();
 
     return this.initPromise;
@@ -60,42 +34,41 @@ export class CoreBridge {
    * Direct service access
    */
   public static getApp() {
-    return this.app;
+    return this.container;
   }
   public static getOrchestrator() {
-    return this.orchestrator;
+    return this.container?.orchestrator;
   }
   public static getStorage() {
-    return this.storage;
+    return this.container?.storage;
   }
   public static getConfig() {
-    return this.config;
+    return this.container?.config;
   }
 
   /**
    * Execute an operation via Orchestrator
    */
   public static async execute(operation: string, payload: any) {
-    if (!this.orchestrator) await this.init();
-    return await this.orchestrator.execute(operation, payload);
+    if (!this.container) await this.init();
+    return await this.container!.orchestrator.execute(operation, payload);
   }
 
   /**
    * Legacy Container Compatibility Layer
    */
   public static getLegacyContainer(config: any) {
-    return new Container(config);
+    return new LegacyContainer(config);
   }
 }
 
 /**
  * Legacy Container class to support older UI/CLI versions
  */
-export class Container {
+export class LegacyContainer {
   constructor(private config: any) {
     const bridgeConfig = CoreBridge.getConfig();
     if (bridgeConfig && config) {
-      // Synchronize connections from legacy config object
       if (typeof config.getDBDestination === 'function') {
         const environments = config.ENVIRONMENTS || [];
         for (const env of Object.keys(environments)) {
@@ -115,14 +88,14 @@ export class Container {
       },
       comparator: (type: string, name: string) => async (destEnv: string) => {
         const config = CoreBridge.getConfig();
-        const srcEnv = config.getSourceEnv ? config.getSourceEnv(destEnv) : 'DEV'; // Fallback logic
+        const srcEnv = config?.getSourceEnv ? config.getSourceEnv(destEnv) : 'DEV';
         return await CoreBridge.execute('compare', { srcEnv, destEnv, type, name });
       },
       migrator:
         (type: string, status: string, name: string) => async (destEnv: string, options: any) => {
           const config = CoreBridge.getConfig();
           const srcEnv =
-            options.sourceEnv || (config.getSourceEnv ? config.getSourceEnv(destEnv) : 'DEV');
+            options.sourceEnv || (config?.getSourceEnv ? config.getSourceEnv(destEnv) : 'DEV');
           return await CoreBridge.execute('migrate', {
             srcEnv,
             destEnv,

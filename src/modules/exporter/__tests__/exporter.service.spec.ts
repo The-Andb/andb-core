@@ -59,7 +59,7 @@ describe('ExporterService', () => {
     (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
     (fs.writeFileSync as jest.Mock).mockReturnValue(undefined);
 
-    service = new ExporterService(driverFactory, configService, storageService, mockParserService as any);
+    service = new ExporterService(driverFactory, configService, mockParserService as any, storageService);
   });
 
   afterEach(() => {

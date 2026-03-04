@@ -5,7 +5,7 @@ import {
   IDatabaseConfig,
   IMigrator,
 } from '../../../common/interfaces/driver.interface';
-import { Logger } from '@nestjs/common';
+const { getLogger } = require('andb-logger');
 import * as fs from 'fs';
 import * as path from 'path';
 import { DumpIntrospectionService } from './dump.introspection';
@@ -13,7 +13,7 @@ import { ParserService } from '../../parser/parser.service';
 import { MysqlMigrator } from '../../migrator/mysql/mysql.migrator';
 
 export class DumpDriver implements IDatabaseDriver {
-  private readonly logger = new Logger(DumpDriver.name);
+  private readonly logger = getLogger({ logName: 'DumpDriver' });
   // Store DDLs by type
   public data: Record<string, Map<string, string>> = {
     TABLES: new Map(),
@@ -48,12 +48,12 @@ export class DumpDriver implements IDatabaseDriver {
       throw new Error(`Dump file not found: ${resolvedPath}`);
     }
 
-    this.logger.log(`Parsing dump file: ${resolvedPath}`);
+    this.logger.info(`Parsing dump file: ${resolvedPath}`);
     const content = fs.readFileSync(resolvedPath, 'utf8');
     this._parseDump(content);
 
     const count = this.data.TABLES.size;
-    this.logger.log(`Parsed ${count} tables from dump.`);
+    this.logger.info(`Parsed ${count} tables from dump.`);
   }
 
   /**

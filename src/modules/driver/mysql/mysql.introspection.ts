@@ -96,7 +96,86 @@ export class MysqlIntrospectionService implements IIntrospectionService {
       if (ddl) {
         ddl = ddl.replace(/AUTO_INCREMENT=\d+\s/, '');
       }
-      return this._normalizeDDL(ddl);
+
+      let normalizedDdl = this._normalizeDDL(ddl);
+
+      // Sort indexes to avoid false positive text diffs on index reordering
+      const lines = normalizedDdl.split('\n');
+      const standardLines: string[] = [];
+      const indexLines: string[] = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const _line = lines[i];
+        if (
+          _line.trim().startsWith('KEY `') ||
+          _line.trim().startsWith('UNIQUE KEY `') ||
+          _line.trim().startsWith('FULLTEXT KEY `') ||
+          _line.trim().startsWith('SPATIAL KEY `') ||
+          _line.trim().startsWith('INDEX `')
+        ) {
+          // If the previous line ended with a comma, we might need to be careful, but MySQL SHOW CREATE TABLE 
+          // usually formats one constraint per line ending with comma except the last.
+          // To sort safely, we strip trailing comma, sort, and add them back.
+          indexLines.push(_line);
+        } else {
+          standardLines.push(_line);
+        }
+      }
+
+      if (indexLines.length > 0) {
+        // Find where index lines were (usually before CONSTRAINT or `) ENGINE=`)
+        // To be safe, we collect all index lines, and replace the block where the first index started.
+        // Identify the exact insertion point (right after the last column or primary key before the first index line was found).
+        // Since we extracted them, `standardLines` has the table without those specific indexes.
+
+        // Strip trailing commas from all index lines, sort them.
+        indexLines.sort((a, b) => {
+          const aName = a.trim().match(/KEY\s+`([^`]+)`/)?.[1] || a;
+          const bName = b.trim().match(/KEY\s+`([^`]+)`/)?.[1] || b;
+          return aName.localeCompare(bName);
+        });
+
+        // Find the index of the first line that starts with ')' or 'CONSTRAINT' searching from the end of standardLines
+        let insertAt = standardLines.length - 1;
+        for (let i = standardLines.length - 1; i >= 0; i--) {
+          if (standardLines[i].trim().startsWith(')')) {
+            insertAt = i;
+          } else if (standardLines[i].trim().startsWith('CONSTRAINT')) {
+            insertAt = i;
+          } else if (standardLines[i].trim().startsWith('PRIMARY KEY')) {
+            // Usually PK is before other keys, so we insert after
+            insertAt = i + 1;
+            break;
+          } else if (standardLines[i].trim() !== ')' && !standardLines[i].trim().startsWith('CONSTRAINT')) {
+            // Found a column definition, break
+            insertAt = i + 1;
+            break;
+          }
+        }
+
+        // Ensure trailing comma logic is sound. We will apply commas to all lines before the last line inside the definition.
+        standardLines.splice(insertAt, 0, ...indexLines);
+
+        // Re-evaluate trailing commas inside the CREATE TABLE parenthesis.
+        let insideParen = false;
+        for (let i = 0; i < standardLines.length; i++) {
+          if (standardLines[i].includes('CREATE TABLE')) {
+            insideParen = true;
+          } else if (insideParen && standardLines[i].trim().startsWith(')')) {
+            insideParen = false;
+            // Remove comma from the line right before the closing paren if it exists
+            if (i > 0 && standardLines[i - 1].trim().endsWith(',')) {
+              standardLines[i - 1] = standardLines[i - 1].replace(/,$/, '');
+            }
+          } else if (insideParen && standardLines[i].trim().length > 0 && standardLines[i + 1] && !standardLines[i + 1].trim().startsWith(')')) {
+            // ensure it has a comma if it's not the last item
+            if (!standardLines[i].trim().endsWith(',')) {
+              standardLines[i] = standardLines[i] + ',';
+            }
+          }
+        }
+      }
+      return standardLines.join('\n');
     } catch (err: any) {
       console.error(`[Introspection] Failed to get TABLE DDL for "${tableName}": ${err.message}`);
       return '';

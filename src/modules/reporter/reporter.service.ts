@@ -1,11 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+const { getLogger } = require('andb-logger');
 import * as fs from 'fs';
 import * as path from 'path';
 import { ISchemaDiff, IObjectDiff } from '../../common/interfaces/schema.interface';
 
-@Injectable()
 export class ReporterService {
-  private readonly logger = new Logger(ReporterService.name);
+  private readonly logger = getLogger({ logName: 'ReporterService' });
 
   async generateHtmlReport(
     env: string,
@@ -77,7 +76,7 @@ export class ReporterService {
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     fs.writeFileSync(outputPath, reportHTML);
 
-    this.logger.log(`Generated HTML report: ${outputPath}`);
+    this.logger.info(`Generated HTML report: ${outputPath}`);
     return outputPath;
   }
 

@@ -1,24 +1,27 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+const { getLogger } = require('andb-logger');
 import { DriverFactoryService } from '../driver/driver-factory.service';
 import { ProjectConfigService } from '../config/project-config.service';
 import { ParserService } from '../parser/parser.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ConnectionType } from '../../common/interfaces/connection.interface';
-import { STORAGE_SERVICE } from '../../common/constants/tokens';
 
-@Injectable()
 export class ExporterService {
-  private readonly logger = new Logger(ExporterService.name);
+  private readonly logger = getLogger({ logName: 'ExporterService' });
 
   constructor(
     private readonly driverFactory: DriverFactoryService,
     private readonly configService: ProjectConfigService,
     private readonly parser: ParserService,
-    @Inject(STORAGE_SERVICE) private readonly storageService: any,
+    private readonly storageService: any,
   ) { }
 
-  async exportSchema(envName: string, specificName?: string, typeFilter?: string) {
+  async exportSchema(
+    envName: string,
+    specificName?: string,
+    typeFilter?: string,
+    onProgress?: (progress: { type: string; current: number; total: number; objectName: string }) => void
+  ) {
     console.log(`📦 [Exporter] exportSchema called: env=${envName}, name=${specificName || 'ALL'}, typeFilter=${typeFilter || 'ALL'}`);
 
     const connection = this.configService.getConnection(envName);
@@ -89,6 +92,15 @@ export class ExporterService {
             // Save to storage — always save so it appears in sidebar list
             await this.storageService.saveDDL(envName, dbName, pluralType, name, ddl || '');
             savedCount++;
+
+            if (onProgress) {
+              onProgress({
+                type: pluralType,
+                current: savedCount,
+                total: list.length,
+                objectName: name
+              });
+            }
           } catch (err: any) {
             errorCount++;
             this.logger.error(`[Export] Failed to export ${type} "${name}": ${err.message}`);
@@ -97,7 +109,7 @@ export class ExporterService {
 
         // Diagnostic summary per type
         if (list.length > 0) {
-          this.logger.log(
+          this.logger.info(
             `[Export] ${pluralType}: listed=${list.length}, saved=${savedCount}, emptyDDL=${emptyDDLCount}, errors=${errorCount}`,
           );
         }
@@ -112,7 +124,7 @@ export class ExporterService {
       }
 
 
-      this.logger.log(`Exported schema for ${envName}: ${JSON.stringify(summary)}`);
+      this.logger.info(`Exported schema for ${envName}: ${JSON.stringify(summary)}`);
       return summary;
     } finally {
       await driver.disconnect();

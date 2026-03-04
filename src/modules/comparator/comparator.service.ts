@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+const { getLogger } = require('andb-logger');
 import { ParserService } from '../parser/parser.service';
 import {
   IDiffOperation,
@@ -7,20 +7,18 @@ import {
   ISchemaDiff,
 } from '../../common/interfaces/diff.interface';
 import { IIntrospectionService } from '../../common/interfaces/driver.interface';
-import { STORAGE_SERVICE, PROJECT_CONFIG_SERVICE } from '../../common/constants/tokens';
 import { MysqlMigrator } from '../migrator/mysql/mysql.migrator';
 
-@Injectable()
 export class ComparatorService {
-  private readonly logger = new Logger(ComparatorService.name);
+  private readonly logger = getLogger({ logName: 'ComparatorService' });
   private readonly migrator = new MysqlMigrator();
   private readonly TRIGGERS = 'TRIGGERS';
   private readonly TABLES = 'TABLES';
 
   constructor(
     private readonly parser: ParserService,
-    @Inject(STORAGE_SERVICE) private readonly storageService: any,
-    @Inject(PROJECT_CONFIG_SERVICE) private readonly configService: any,
+    private readonly storageService: any,
+    private readonly configService: any,
   ) { }
 
   /**
@@ -99,10 +97,20 @@ export class ComparatorService {
     // 2. Clear MySQL Version Comments
     processed = processed.replace(/\/\*!\d+\s*([^/]+)\*\//g, '$1');
 
-    // 3. Remove default index algorithms like USING BTREE added implicitly by MySQL
+    // 3. Remove default index algorithms added implicitly by MySQL
     processed = processed.replace(/ USING BTREE/ig, '');
 
-    // 4. Normalize spacing and casing
+    // 4. Remove default collations/charsets that often cause false-positives
+    const defaultCollations = ['utf8mb4_0900_ai_ci', 'utf8mb4_general_ci', 'latin1_swedish_ci', 'utf8mb4_unicode_ci'];
+    defaultCollations.forEach(col => {
+      processed = processed.replace(new RegExp(` COLLATE ${col}`, 'gi'), '');
+    });
+    const defaultCharsets = ['utf8mb4', 'utf8', 'latin1'];
+    defaultCharsets.forEach(cs => {
+      processed = processed.replace(new RegExp(` CHARACTER SET ${cs}`, 'gi'), '');
+    });
+
+    // 5. Normalize spacing and casing
     processed = processed.toUpperCase().replace(/\s+/g, ' ').trim();
 
     return processed;
@@ -131,16 +139,11 @@ export class ComparatorService {
         const normDest = this._normalizeDef(destColumnDef);
 
         if (normSrc !== normDest) {
-          // Logic from Legacy: Check collation exception
-          const srcCollation = srcColumnDef.match(/COLLATE\s+(\w+)/)?.[1];
-          if (srcCollation === undefined) {
-            const destCollation = destColumnDef.match(/COLLATE\s+(\w+)/)?.[1];
-            if (destCollation === 'latin1_swedish_ci') {
-              // Skip implicit collation diff
-            } else {
-              alterColumns.push({ type: 'MODIFY', name: columnName, def: srcColumnDef });
-            }
-          } else {
+          // Additional safety: if only CHARSET/COLLATE differ and it's a common default, skip
+          const isOnlyCollationDiff = normSrc.replace(/ CHARACTER SET \w+| COLLATE \w+/g, '') ===
+            normDest.replace(/ CHARACTER SET \w+| COLLATE \w+/g, '');
+
+          if (!isOnlyCollationDiff) {
             alterColumns.push({ type: 'MODIFY', name: columnName, def: srcColumnDef });
           }
         }
@@ -765,15 +768,15 @@ export class ComparatorService {
    * Log word-level diff (Parity with legacy logDiff)
    */
   logDiff(src: string, dest: string) {
-    this.logger.log('--- DIFF START ---');
-    this.logger.log(`Source: ${src.substring(0, 100)}...`);
-    this.logger.log(`Target: ${dest.substring(0, 100)}...`);
+    this.logger.info('--- DIFF START ---');
+    this.logger.info(`Source: ${src.substring(0, 100)}...`);
+    this.logger.info(`Target: ${dest.substring(0, 100)}...`);
     // In a real terminal we'd use 'diff' or a library. For now, basic logging.
-    this.logger.log('--- DIFF END ---');
+    this.logger.info('--- DIFF END ---');
   }
 
   private _logDetailedDiff(srcEnv: string, destEnv: string, type: string, name: string, src: string, dest: string) {
-    this.logger.log(`Detailed Diff for ${type} "${name}" (${srcEnv} -> ${destEnv}):`);
+    this.logger.info(`Detailed Diff for ${type} "${name}" (${srcEnv} -> ${destEnv}):`);
     this.logDiff(src, dest);
   }
 
@@ -801,7 +804,7 @@ export class ComparatorService {
   async reportTableStructureChange(envName: string, tables: string[], specificName?: string) {
     // This in legacy generates the alter-columns.list and alter-indexes.list
     // In NestJS, we return this as part of the compare result.
-    this.logger.log(`Reporting structure changes for ${envName}...`);
+    this.logger.info(`Reporting structure changes for ${envName}...`);
   }
 
   /**

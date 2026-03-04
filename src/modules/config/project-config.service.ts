@@ -1,12 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+const { getLogger } = require('andb-logger');
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { IDatabaseConfig, ConnectionType } from '../../common/interfaces/connection.interface';
 
-@Injectable()
 export class ProjectConfigService {
-  private readonly logger = new Logger(ProjectConfigService.name);
+  private readonly logger = getLogger({ logName: 'ProjectConfigService' });
   private config: any = {};
 
   constructor() {
@@ -18,7 +17,7 @@ export class ProjectConfigService {
     if (fs.existsSync(configPath)) {
       try {
         this.config = yaml.load(fs.readFileSync(configPath, 'utf8')) || {};
-        this.logger.log('Loaded configuration from andb.yaml');
+        this.logger.info('Loaded configuration from andb.yaml');
       } catch (e: any) {
         this.logger.error(`Error parsing andb.yaml: ${e.message}`);
       }
@@ -58,8 +57,8 @@ export class ProjectConfigService {
   }
 
   getAutoBackup(): boolean {
-    // Default to true if not specified
-    if (this.config.autoBackup === undefined) return true;
+    // Default to false if not specified (safer for CLI/tests)
+    if (this.config.autoBackup === undefined) return false;
     return !!this.config.autoBackup;
   }
 
@@ -76,5 +75,37 @@ export class ProjectConfigService {
 
   setAutoBackup(enabled: boolean) {
     this.config.autoBackup = enabled;
+  }
+
+  getFeatureFlags(): Record<string, boolean> {
+    return this.config.FEATURE_FLAGS || {};
+  }
+
+  isFeatureEnabled(key: string): boolean {
+    const flags = this.getFeatureFlags();
+    if (flags[key] !== undefined) return !!flags[key];
+
+    // Fallback to process.env if not in YAML
+    const envKey = `FEATURE_${key.toUpperCase().replace(/\./g, '_')}`;
+    return process.env[envKey] === 'true';
+  }
+
+  setFeatureFlag(key: string, enabled: boolean) {
+    if (!this.config.FEATURE_FLAGS) {
+      this.config.FEATURE_FLAGS = {};
+    }
+    this.config.FEATURE_FLAGS[key] = enabled;
+  }
+
+  saveConfig() {
+    const configPath = path.join(process.cwd(), 'andb.yaml');
+    try {
+      const yamlStr = yaml.dump(this.config);
+      fs.writeFileSync(configPath, yamlStr, 'utf8');
+      this.logger.info('Saved configuration to andb.yaml');
+    } catch (e: any) {
+      this.logger.error(`Error saving andb.yaml: ${e.message}`);
+      throw e;
+    }
   }
 }
