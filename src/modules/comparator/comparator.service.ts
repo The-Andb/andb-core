@@ -100,11 +100,9 @@ export class ComparatorService {
     // 3. Remove default index algorithms added implicitly by MySQL
     processed = processed.replace(/ USING BTREE/ig, '');
 
-    // 4. Remove default collations/charsets that often cause false-positives
-    const defaultCollations = ['utf8mb4_0900_ai_ci', 'utf8mb4_general_ci', 'latin1_swedish_ci', 'utf8mb4_unicode_ci'];
-    defaultCollations.forEach(col => {
-      processed = processed.replace(new RegExp(` COLLATE ${col}`, 'gi'), '');
-    });
+    // 4. Remove truly implicit default collation (latin1_swedish_ci) that causes false-positives
+    // Other collations (utf8mb4_unicode_ci, utf8mb4_general_ci, etc.) are preserved as meaningful differences
+    processed = processed.replace(/ COLLATE latin1_swedish_ci/gi, '');
     const defaultCharsets = ['utf8mb4', 'utf8', 'latin1'];
     defaultCharsets.forEach(cs => {
       processed = processed.replace(new RegExp(` CHARACTER SET ${cs}`, 'gi'), '');
@@ -139,11 +137,15 @@ export class ComparatorService {
         const normDest = this._normalizeDef(destColumnDef);
 
         if (normSrc !== normDest) {
-          // Additional safety: if only CHARSET/COLLATE differ and it's a common default, skip
-          const isOnlyCollationDiff = normSrc.replace(/ CHARACTER SET \w+| COLLATE \w+/g, '') ===
-            normDest.replace(/ CHARACTER SET \w+| COLLATE \w+/g, '');
+          // Only skip if the difference is exclusively an implicit default collation (latin1_swedish_ci)
+          // Non-default collation differences (e.g., utf8mb4_unicode_ci vs utf8mb4_general_ci) ARE meaningful
+          const stripImplicitCollation = (s: string) => s
+            .replace(/ COLLATE LATIN1_SWEDISH_CI/g, '')
+            .replace(/ CHARACTER SET \w+/g, '')
+            .trim();
+          const isOnlyImplicitCollationDiff = stripImplicitCollation(normSrc) === stripImplicitCollation(normDest);
 
-          if (!isOnlyCollationDiff) {
+          if (!isOnlyImplicitCollationDiff) {
             alterColumns.push({ type: 'MODIFY', name: columnName, def: srcColumnDef });
           }
         }

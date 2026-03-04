@@ -618,8 +618,8 @@ export class ParserService {
       }
 
       const triggerName = triggerNameMatch[1];
-      const timing = triggerNameLine?.match(/(BEFORE|AFTER)/i)?.[1] || '';
-      const event = triggerNameLine?.match(/(INSERT|UPDATE|DELETE)/i)?.[1] || '';
+      const timing = (triggerNameLine?.match(/(BEFORE|AFTER)/i)?.[1] || '').toUpperCase();
+      const event = (triggerNameLine?.match(/(INSERT|UPDATE|DELETE)/i)?.[1] || '').toUpperCase();
       const tableName = triggerNameLine?.match(/ON\s+`([^`]+)`/i)?.[1] || '';
 
       return {
