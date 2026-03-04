@@ -1,4 +1,4 @@
-export * from './driver.module';
+export * from './driver-factory.service';
 export * from './mysql/mysql.driver';
-export * from './mysql/mysql.introspection';
-export * from './mysql/mysql.monitoring';
+export * from './dump/dump.driver';
+export * from './ssh-tunnel';

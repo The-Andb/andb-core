@@ -88,14 +88,14 @@ export class LegacyContainer {
       },
       comparator: (type: string, name: string) => async (destEnv: string) => {
         const config = CoreBridge.getConfig();
-        const srcEnv = config?.getSourceEnv ? config.getSourceEnv(destEnv) : 'DEV';
+        const srcEnv = (config as any)?.getSourceEnv?.(destEnv) ?? 'DEV';
         return await CoreBridge.execute('compare', { srcEnv, destEnv, type, name });
       },
       migrator:
         (type: string, status: string, name: string) => async (destEnv: string, options: any) => {
           const config = CoreBridge.getConfig();
           const srcEnv =
-            options.sourceEnv || (config?.getSourceEnv ? config.getSourceEnv(destEnv) : 'DEV');
+            options.sourceEnv || ((config as any)?.getSourceEnv?.(destEnv) ?? 'DEV');
           return await CoreBridge.execute('migrate', {
             srcEnv,
             destEnv,
