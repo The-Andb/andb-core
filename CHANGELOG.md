@@ -1,14 +1,14 @@
 # Changelog
 
-All notable changes to the **NestJS rewrite** of The Andb Core will be documented in this file.
+All notable changes to the **Framework rewrite** of The Andb Core will be documented in this file.
 
 ---
 
 ## [4.0.0-alpha.1] - 2026-01-29
 
-### Added (The NestJS Rewrite)
+### Added (The Framework Rewrite)
 
-- **Architectural Foundation**: Complete project initialization with NestJS and TypeScript.
+- **Architectural Foundation**: Complete project initialization with Framework and TypeScript.
 - **Twin Engine Strategy**: Implemented modules side-by-side with legacy logic to ensure parity.
 - **Improved Driver System**:
   - `MysqlDriver`: Refined connection handling and introspection.
@@ -31,4 +31,4 @@ All notable changes to the **NestJS rewrite** of The Andb Core will be documente
 
 ---
 
-_Note: For historical changes prior to the NestJS rewrite, please refer to the legacy `@the-andb/core` repository._
+_Note: For historical changes prior to the Framework rewrite, please refer to the legacy `@the-andb/core` repository._

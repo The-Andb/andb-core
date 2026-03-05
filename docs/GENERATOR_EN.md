@@ -1,8 +1,8 @@
-# Script Generator - @the-andb/core-nest
+# Script Generator - @the-andb/core
 
 ## Overview
 
-The Script Generator automatically creates npm scripts in your `package.json` to streamline database workflows across multiple environments. It is a key part of the `@the-andb/core-nest` package, ensuring consistent and predictable database operations.
+The Script Generator automatically creates npm scripts in your `package.json` to streamline database workflows across multiple environments. It is a key part of the `@the-andb/core` package, ensuring consistent and predictable database operations.
 
 ## Usage
 

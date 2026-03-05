@@ -84,7 +84,27 @@ export class SchemaOrchestrator {
       throw new Error(`Migration safety: Cannot execute migration into a static SQL file "${destEnv}".`);
     }
 
-    const allStatements = objects.flatMap((obj: any) =>
+    if (!Array.isArray(objects) || objects.length === 0) {
+      this.logger.info('No objects to migrate.');
+      return { success: true, successful: [], failed: [], dryRun, safetyLevel: 'safe', totalStatements: 0 };
+    }
+
+    if (!Array.isArray(objects) || objects.length === 0) {
+      this.logger.info('No objects to migrate.');
+      return { success: true, successful: [], failed: [], dryRun, safetyLevel: 'safe', totalStatements: 0 };
+    }
+
+    // Rule: Never migrate DROP. Filter out DEPRECATED objects.
+    const safeObjects = objects.filter((obj: any) =>
+      obj.status !== 'DEPRECATED' && obj.status !== 'deprecated' && obj.status !== 'missing_in_source'
+    );
+
+    if (safeObjects.length === 0) {
+      this.logger.info('All selected objects are DEPRECATED (DROP). Migration skipped by safety rule.');
+      return { success: true, successful: [], failed: [], dryRun, safetyLevel: 'safe', totalStatements: 0, skippedDrops: objects.length };
+    }
+
+    const allStatements = safeObjects.flatMap((obj: any) =>
       Array.isArray(obj.ddl) ? obj.ddl : (obj.ddl ? [obj.ddl] : [])
     );
 
@@ -93,13 +113,13 @@ export class SchemaOrchestrator {
 
     // 2. Dry Run Handler
     if (dryRun) {
-      this.logger.info(`🔍 DRY RUN: Simulating migration for ${objects.length} objects. Level: ${safetyReport.level}`);
+      this.logger.info(`🔍 DRY RUN: Simulating migration for ${safeObjects.length} objects. Level: ${safetyReport.level}`);
       return {
         success: true,
         dryRun: true,
         safetyReport,
         totalStatements: allStatements.length,
-        objects: objects.map((obj: any) => ({
+        objects: safeObjects.map((obj: any) => ({
           name: obj.name,
           type: obj.type,
           status: obj.status,
@@ -109,7 +129,7 @@ export class SchemaOrchestrator {
     }
 
     // 3. Live Migration
-    return await this.performLiveMigration(destEnv, destConn, objects, safetyReport, payload);
+    return await this.performLiveMigration(destEnv, destConn, safeObjects, safetyReport, payload);
   }
 
   private async performLiveMigration(

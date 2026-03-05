@@ -100,17 +100,16 @@ export class ComparatorService {
     // 3. Remove default index algorithms added implicitly by MySQL
     processed = processed.replace(/ USING BTREE/ig, '');
 
-    // 4. Remove truly implicit default collation (latin1_swedish_ci) that causes false-positives
+    // 4. Remove truly implicit default collation (latin1_swedish_ci, utf8mb4_0900_ai_ci)
     // Other collations (utf8mb4_unicode_ci, utf8mb4_general_ci, etc.) are preserved as meaningful differences
-    processed = processed.replace(/ COLLATE latin1_swedish_ci/gi, '');
+    processed = processed.replace(/\s+COLLATE\s+(latin1_swedish_ci|utf8mb4_0900_ai_ci)/gi, '');
     const defaultCharsets = ['utf8mb4', 'utf8', 'latin1'];
     defaultCharsets.forEach(cs => {
-      processed = processed.replace(new RegExp(` CHARACTER SET ${cs}`, 'gi'), '');
+      processed = processed.replace(new RegExp(`\\s+CHARACTER SET ${cs}`, 'gi'), '');
     });
 
     // 5. Normalize spacing and casing
     processed = processed.toUpperCase().replace(/\s+/g, ' ').trim();
-
     return processed;
   }
 
@@ -137,17 +136,7 @@ export class ComparatorService {
         const normDest = this._normalizeDef(destColumnDef);
 
         if (normSrc !== normDest) {
-          // Only skip if the difference is exclusively an implicit default collation (latin1_swedish_ci)
-          // Non-default collation differences (e.g., utf8mb4_unicode_ci vs utf8mb4_general_ci) ARE meaningful
-          const stripImplicitCollation = (s: string) => s
-            .replace(/ COLLATE LATIN1_SWEDISH_CI/g, '')
-            .replace(/ CHARACTER SET \w+/g, '')
-            .trim();
-          const isOnlyImplicitCollationDiff = stripImplicitCollation(normSrc) === stripImplicitCollation(normDest);
-
-          if (!isOnlyImplicitCollationDiff) {
-            alterColumns.push({ type: 'MODIFY', name: columnName, def: srcColumnDef });
-          }
+          alterColumns.push({ type: 'MODIFY', name: columnName, def: srcColumnDef });
         }
       }
       prevColumnName = columnName;
@@ -805,7 +794,7 @@ export class ComparatorService {
    */
   async reportTableStructureChange(envName: string, tables: string[], specificName?: string) {
     // This in legacy generates the alter-columns.list and alter-indexes.list
-    // In NestJS, we return this as part of the compare result.
+    // In Framework, we return this as part of the compare result.
     this.logger.info(`Reporting structure changes for ${envName}...`);
   }
 

@@ -17,7 +17,7 @@ import { OrchestrationService } from './modules/orchestration/orchestration.serv
 import { featureConfig } from './modules/config/feature.config';
 
 /**
- * Lightweight DI Container — replaces NestJS AppModule + NestFactory.
+ * Lightweight DI Container — replaces Framework AppModule + NestFactory.
  * All wiring is explicit. No decorators, no reflection, no magic.
  */
 export class Container {

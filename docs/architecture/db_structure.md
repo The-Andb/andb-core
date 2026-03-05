@@ -1,6 +1,6 @@
 # Database Structure (Persistence Layer)
 
-This document describes the schema used for the persistence layer (SQLite) when `@the-andb/core-nest` is used with UI integration or for historical tracking.
+This document describes the schema used for the persistence layer (SQLite) when `@the-andb/core` is used with UI integration or for historical tracking.
 
 ## Entity Relationship Diagram
 
@@ -73,12 +73,12 @@ erDiagram
     }
 ```
 
-## Implementation Strategy (NestJS)
+## Implementation Strategy (Framework)
 
-In the NestJS rewrite, this structure will be implemented using:
+In the Framework rewrite, this structure will be implemented using:
 
 1.  **Domain Entities**: Type-safe classes representing these database schemas.
-2.  **Repository Pattern**: Specific Repository classes managed by NestJS DI for data access.
+2.  **Repository Pattern**: Specific Repository classes managed by Framework DI for data access.
 3.  **Storage Providers**: Pluggable providers (SQLite, File, Postgres) that satisfy a common `IStorageProvider` interface.
 
 ## Mirroring Legacy Logic

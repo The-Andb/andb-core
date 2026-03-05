@@ -1,13 +1,13 @@
-# CLI Guide - @the-andb/core-nest
+# CLI Guide - @the-andb/core
 
 ## Overview
 
-The Command Line Interface (CLI) for the NestJS rewrite of `@the-andb/core` provides tools for project automation and helper utilities. It is built using `nest-commander`.
+The Command Line Interface (CLI) for the Framework rewrite of `@the-andb/core` provides tools for project automation and helper utilities. It is built using `nest-commander`.
 
 ## Installation
 
 ```bash
-cd core-nest
+cd core
 npm install
 ```
 

@@ -1,4 +1,3 @@
-import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
 import { ComparatorService } from '../src/modules/comparator/comparator.service';
 import { DriverFactoryService } from '../src/modules/driver/driver-factory.service';

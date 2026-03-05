@@ -11,7 +11,7 @@ export class GitService {
 
   async initialize(config: IGitConfig) {
     this.currentConfig = config;
-    const baseDir = config.storagePath || path.join(process.cwd(), 'db');
+    const baseDir = config.storagePath || require('path').join(require('os').homedir(), '.andb', 'git-storage');
 
     if (!fs.existsSync(baseDir)) {
       fs.mkdirSync(baseDir, { recursive: true });

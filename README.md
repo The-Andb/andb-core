@@ -1,19 +1,19 @@
-# The Andb Core (NestJS) 🚀
+# The Andb Core (Framework) 🚀
 
 **The Premium Database Orchestration Engine — Rebuilt for the Future.**
-Intelligent Schema Management, Seamless Synchronization, and High-Fidelity Reporting, now powered by **NestJS** and **TypeScript**.
+Intelligent Schema Management, Seamless Synchronization, and High-Fidelity Reporting, now powered by **Framework** and **TypeScript**.
 
 ---
 
 ## 🌟 Overview
 
-**The Andb Core (Nest)** is a complete rewrite of the heart of The Andb Orchestrator ecosystem. By leveraging NestJS and TypeScript, we provide an even more robust, type-safe, and modular engine to manage database schemas across multiple environments (DEV, STAGE, PROD) with absolute precision.
+**The Andb Core (Nest)** is a complete rewrite of the heart of The Andb Orchestrator ecosystem. By leveraging Framework and TypeScript, we provide an even more robust, type-safe, and modular engine to manage database schemas across multiple environments (DEV, STAGE, PROD) with absolute precision.
 
 This rewrite follows our **"Twin Engine" strategy**, building the new engine side-by-side with the legacy one to ensure 100% feature parity and a seamless transition.
 
-## ✨ New in the NestJS Rewrite
+## ✨ New in the Framework Rewrite
 
-- 🏗️ **Modularity**: Clean NestJS module system for better maintainability and extensibility.
+- 🏗️ **Modularity**: Clean Framework module system for better maintainability and extensibility.
 - 🛡️ **Type Safety**: Full TypeScript implementation for robust and bug-free development.
 - 💎 **Improved Drivers**: Refined Strategy Pattern for database drivers, including a new `DumpDriver` for offline schema analysis.
 - 🚀 **Modern CLI**: Built with `nest-commander` for a more intuitive and powerful command-line experience.
@@ -30,8 +30,8 @@ This rewrite follows our **"Twin Engine" strategy**, building the new engine sid
 ### Installation
 
 ```bash
-# Clone the monorepo and navigate to core-nest
-cd core-nest
+# Clone the monorepo and navigate to core
+cd core
 npm install
 ```
 
@@ -57,11 +57,11 @@ andb generate
 ## 📁 Project Structure
 
 ```text
-core-nest/
+core/
 ├── src/
 │   ├── cli/          # Command-line interface commands (nest-commander)
 │   ├── common/       # Interfaces, constants, and shared types
-│   └── modules/      # Core logic organized into NestJS modules
+│   └── modules/      # Core logic organized into Framework modules
 │       ├── comparator/ # Schema comparison logic
 │       ├── driver/     # Database drivers (MySQL, Dump)
 │       ├── migrator/   # SQL generation for migrations
@@ -74,7 +74,7 @@ core-nest/
 
 We are currently in **Phase 4.5** of our master plan. Our goal is 100% parity with the legacy `@the-andb/core` package before a full switchover.
 
-- [x] Core Infrastructure (NestJS + TypeScript)
+- [x] Core Infrastructure (Framework + TypeScript)
 - [x] MySQL Driver & Dump Driver
 - [x] Schema Comparison (Tables, Views, Routines, Triggers)
 - [x] CLI Parity (`generate`, `helper`)

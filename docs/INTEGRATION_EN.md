@@ -1,30 +1,29 @@
-# Integration Guide - @the-andb/core-nest
+# Integration Guide - @the-andb/core
 
 ## Overview
 
-`@the-andb/core-nest` provides a modern, type-safe API built on NestJS. It can be integrated into other NestJS applications or used programmatically in standalone scripts.
+`@the-andb/core` provides a modern, type-safe API built on Framework. It can be integrated into other Framework applications or used programmatically in standalone scripts.
 
 ## Installation
 
 ```bash
-npm install @the-andb/core-nest
+npm install @the-andb/core
 ```
 
-## Programmatic Usage (Standalone)
+## Programmatic Usage
 
-If you are not using NestJS for your entire application, you can still leverage the core logic by bootstrapping the NestJS container manually.
+You can leverage the core Engine logic by bootstrapping the `Container` manually.
 
 ```typescript
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { ComparatorService } from './modules/comparator/comparator.service';
-import { DriverFactoryService } from './modules/driver/driver-factory.service';
+import { Container } from '@the-andb/core';
 
 async function bootstrap() {
-  const app = await NestFactory.createApplicationContext(AppModule);
+  // Initialize the lightweight DI container
+  const container = Container.getInstance();
 
-  const comparator = app.get(ComparatorService);
-  const driverFactory = app.get(DriverFactoryService);
+  // Access core services directly (no decorators needed)
+  const comparator = container.comparator;
+  const driverFactory = container.driverFactory;
 
   // Use the services
   const driver = await driverFactory.create('mysql', {
@@ -35,62 +34,17 @@ async function bootstrap() {
 
   const tables = await driver.getIntrospectionService().listTables('my_db');
   console.log('Tables:', tables);
-
-  await app.close();
 }
 
 bootstrap();
 ```
 
-## Integration in NestJS Apps
+## Core Services
 
-### 1. Import Modules
-
-Import the necessary modules into your feature module or `AppModule`.
-
-```typescript
-import { Module } from '@nestjs/common';
-import { ComparatorModule } from '@the-andb/core-nest';
-import { DriverModule } from '@the-andb/core-nest';
-
-@Module({
-  imports: [
-    ComparatorModule,
-    DriverModule.forRoot('mysql', {
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      // ...
-    }),
-  ],
-})
-export class MyFeatureModule {}
-```
-
-### 2. Inject Services
-
-Inject the core services into your controllers or services.
-
-```typescript
-import { Injectable } from '@nestjs/common';
-import { ComparatorService } from '@the-andb/core-nest';
-
-@Injectable()
-export class SyncService {
-  constructor(private readonly comparator: ComparatorService) {}
-
-  async syncTables(srcDDL: string, destDDL: string) {
-    const diff = this.comparator.compareTables(srcDDL, destDDL);
-    // ...
-  }
-}
-```
-
-## Core Modules & Services
-
-- **`ParserModule`**: Provides `ParserService` for parsing and normalizing DDL.
-- **`DriverModule`**: Provides `DriverFactoryService` to create database drivers (`MysqlDriver`, `DumpDriver`).
-- **`ComparatorModule`**: Provides `ComparatorService` for deep-diffing database objects.
-- **`MigratorModule`**: Provides `MigratorService` for generating migration SQL.
+- **`ParserService`**: For parsing and normalizing DDL.
+- **`DriverFactoryService`**: To create database drivers (`MysqlDriver`, `DumpDriver`).
+- **`ComparatorService`**: For deep-diffing database objects.
+- **`MigratorService`**: For generating migration SQL.
 
 ## Configuration (andb.yaml)
 
@@ -112,5 +66,5 @@ getDBDestination:
 ## Best Practices
 
 1. **Type Safety**: Always use the provided interfaces for DDL objects and diff operations.
-2. **Dependency Injection**: Favor DI over manual instantiation to leverage NestJS's lifecycle and testing capabilities.
+2. **Dependency Injection**: Favor DI over manual instantiation to leverage Framework's lifecycle and testing capabilities.
 3. **Async/Await**: All database and IO operations are asynchronous.

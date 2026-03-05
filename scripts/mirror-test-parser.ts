@@ -52,7 +52,7 @@ testCases.forEach((test, index) => {
     if (legacyOutput !== nestOutput) {
       console.error(`❌ Mismatch!`);
       console.error(`Legacy: [${legacyOutput}]`);
-      console.error(`NestJS: [${nestOutput}]`);
+      console.error(`Framework: [${nestOutput}]`);
       failed = true;
     } else {
       console.log(`✅ Match: [${nestOutput.substring(0, 50)}...]`);
