@@ -1,6 +1,6 @@
 {
   "name": "@the-andb/core",
-  "version": "4.0.0-beta.5",
+  "version": "4.0.0-beta.2",
   "description": "Professional AI-driven Database Infrastructure Engine. AST-powered Safety, Semantic Diffing, and Multi-Environment Orchestration.",
   "author": "The Andb (ph4n4n)",
   "publishConfig": {
