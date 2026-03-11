@@ -1,7 +1,7 @@
 {
   "name": "@the-andb/core",
   "version": "4.0.0-beta.2",
-  "description": "Professional AI-driven Database Infrastructure Engine. AST-powered Safety, Semantic Diffing, and Multi-Environment Orchestration.",
+  "description": "The Andb - Simplest Database Migration Tool",
   "author": "The Andb (ph4n4n)",
   "publishConfig": {
     "access": "public"
