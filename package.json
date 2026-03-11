@@ -1,6 +1,6 @@
 {
   "name": "@the-andb/core",
-  "version": "4.0.0-beta.2",
+  "version": "4.0.0",
   "description": "The Andb - Simplest Database Migration Tool",
   "author": "The Andb (ph4n4n)",
   "publishConfig": {
