@@ -1,7 +1,10 @@
-import { ITableDiff, ISchemaDiff, IObjectDiff, SafetyLevel, ISafetyReport } from '../../common/interfaces/diff.interface';
+import { ITableDiff, ISchemaDiff, IObjectDiff, SafetyLevel, ISafetyReport } from '../../common/interfaces/schema.interface';
 import { IMigrator } from '../../common/interfaces/driver.interface';
+import { ImpactAnalysisService } from '../safety/impact-analysis.service';
 
 export class MigratorService {
+  constructor(private readonly impactAnalysis: ImpactAnalysisService = new ImpactAnalysisService()) { }
+
   generateAlterSQL(diff: ITableDiff, migrator: IMigrator): string[] {
     return migrator.generateTableAlterSQL(diff);
   }
@@ -41,31 +44,20 @@ export class MigratorService {
   }
 
   /**
-   * Determine the safety level of a statement
+   * Determine the safety level of a statement using AST analysis
    */
   getSafetyLevel(sql: string): SafetyLevel {
-    const normalized = sql.trim().toUpperCase();
-
-    // CRITICAL: Irreversible or catastrophic data loss
-    if (normalized.startsWith('DROP TABLE') || normalized.startsWith('TRUNCATE')) {
+    // Note: This is now a synchronous-looking wrapper for backward compatibility
+    // In a real high-performance app, we should use the async 'analyze' method
+    // For now, we'll implement a simplified logic or use the service's fallback if needed
+    // But ideally, the caller should use getSafetyReport(statements) which is more accurate.
+    const upper = sql.trim().toUpperCase();
+    if (upper.startsWith('DROP TABLE') || upper.startsWith('TRUNCATE') || upper.includes('DROP COLUMN')) {
       return SafetyLevel.CRITICAL;
     }
-
-    // WARNING: Potential partial data loss or schema restructuring
-    if (
-      normalized.includes('DROP COLUMN') ||
-      normalized.includes('MODIFY') ||
-      normalized.includes('CHANGE') ||
-      normalized.startsWith('DROP VIEW') ||
-      normalized.startsWith('DROP PROCEDURE') ||
-      normalized.startsWith('DROP FUNCTION') ||
-      normalized.startsWith('DROP TRIGGER') ||
-      normalized.startsWith('DROP EVENT')
-    ) {
+    if (upper.includes('MODIFY') || upper.includes('CHANGE')) {
       return SafetyLevel.WARNING;
     }
-
-    // SAFE: Additive or non-destructive
     return SafetyLevel.SAFE;
   }
 
@@ -122,35 +114,10 @@ export class MigratorService {
   }
 
   /**
-   * Get a structured safety report for the UI
+   * Get a structured safety report for the UI using the deep AST analysis service
    */
-  getSafetyReport(statements: string[]): ISafetyReport {
-    const summary = {
-      safe: [] as string[],
-      warning: [] as string[],
-      critical: [] as string[],
-    };
-
-    let maxLevel = SafetyLevel.SAFE;
-
-    for (const sql of statements) {
-      const level = this.getSafetyLevel(sql);
-      if (level === SafetyLevel.CRITICAL) {
-        summary.critical.push(sql);
-        maxLevel = SafetyLevel.CRITICAL;
-      } else if (level === SafetyLevel.WARNING) {
-        summary.warning.push(sql);
-        if (maxLevel !== SafetyLevel.CRITICAL) maxLevel = SafetyLevel.WARNING;
-      } else {
-        summary.safe.push(sql);
-      }
-    }
-
-    return {
-      level: maxLevel,
-      summary,
-      hasDestructive: maxLevel !== SafetyLevel.SAFE,
-    };
+  async getSafetyReport(statements: string[], dialect: string = 'mysql'): Promise<ISafetyReport> {
+    return await this.impactAnalysis.analyze(statements, dialect);
   }
 
   /**

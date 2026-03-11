@@ -89,8 +89,10 @@ export class MysqlMigrator {
     });
 
     addIndexes.forEach((op: IDiffOperation) => {
-      // Comparator srcDef: "KEY `idx` (`col`)"
-      clauses.push(`ADD ${op.definition}`);
+      // Safety: strip any position clause (AFTER `col` or FIRST) that may have
+      // leaked from column operations into index definitions
+      const cleanDef = (op.definition || '').replace(/\s+(AFTER\s+`[^`]+`|FIRST)\s*$/i, '');
+      clauses.push(`ADD ${cleanDef}`);
     });
 
     // FK Adds: put in separate statement if modification detected

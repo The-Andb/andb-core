@@ -117,14 +117,16 @@ export class ComparatorService {
   private compareColumns(srcTable: any, destTable: any) {
     const alterColumns: { type: 'ADD' | 'MODIFY'; name: string; def: string }[] = [];
     const missingColumns: string[] = [];
-    let prevColumnName = null;
+    // Track the last column that exists in BOTH src and dest, so AFTER `col`
+    // always references a column the target database actually has.
+    let prevExistingColumnName: string | null = null;
 
     // Check for ADD / MODIFY
     for (const columnName in srcTable.columns) {
       if (!destTable.columns[columnName]) {
         // ADD
         const colDef = srcTable.columns[columnName].replace(/[,;]$/, '');
-        const position = prevColumnName ? `AFTER \`${prevColumnName}\`` : 'FIRST';
+        const position = prevExistingColumnName ? `AFTER \`${prevExistingColumnName}\`` : 'FIRST';
         const def = `${colDef} ${position}`;
         alterColumns.push({ type: 'ADD', name: columnName, def: def });
       } else {
@@ -138,8 +140,8 @@ export class ComparatorService {
         if (normSrc !== normDest) {
           alterColumns.push({ type: 'MODIFY', name: columnName, def: srcColumnDef });
         }
+        prevExistingColumnName = columnName;
       }
-      prevColumnName = columnName;
     }
 
     // Check for DROP
@@ -296,6 +298,7 @@ export class ComparatorService {
     dest: IIntrospectionService,
     srcDbName: string,
     destDbName?: string,
+    destEnv?: string,
   ): Promise<ISchemaDiff> {
     const targetDbName = destDbName || srcDbName;
     const diff: ISchemaDiff = {
@@ -315,8 +318,11 @@ export class ComparatorService {
 
     // New or Change
     for (const tableName of srcTables) {
-      const srcDDL = await src.getTableDDL(srcDbName, tableName);
-      const destDDL = await dest.getTableDDL(targetDbName, tableName);
+      let srcDDL = await src.getTableDDL(srcDbName, tableName);
+      let destDDL = await dest.getTableDDL(targetDbName, tableName);
+
+      srcDDL = this._applyDomainNormalization(srcDDL, destEnv);
+      destDDL = this._applyDomainNormalization(destDDL, destEnv);
 
       if (!destDDL) {
         // New table - for now handled by Migrator if we just send the diff
@@ -357,8 +363,11 @@ export class ComparatorService {
       const allNames = new Set([...srcList, ...destList]);
 
       for (const name of allNames) {
-        const srcDDL = srcList.includes(name) ? await this._getDDL(src, type, srcDbName, name) : '';
-        const destDDL = destList.includes(name) ? await this._getDDL(dest, type, targetDbName, name) : '';
+        let srcDDL = srcList.includes(name) ? await this._getDDL(src, type, srcDbName, name) : '';
+        let destDDL = destList.includes(name) ? await this._getDDL(dest, type, targetDbName, name) : '';
+
+        srcDDL = this._applyDomainNormalization(srcDDL, destEnv);
+        destDDL = this._applyDomainNormalization(destDDL, destEnv);
 
         const objDiff = this.compareGenericDDL(type, name, srcDDL, destDDL);
         if (objDiff) {
@@ -375,8 +384,11 @@ export class ComparatorService {
     const allTriggers = new Set([...srcTriggers, ...destTriggers]);
 
     for (const name of allTriggers) {
-      const srcDDL = srcTriggers.includes(name) ? await src.getTriggerDDL(srcDbName, name) : '';
-      const destDDL = destTriggers.includes(name) ? await dest.getTriggerDDL(targetDbName, name) : '';
+      let srcDDL = srcTriggers.includes(name) ? await src.getTriggerDDL(srcDbName, name) : '';
+      let destDDL = destTriggers.includes(name) ? await dest.getTriggerDDL(targetDbName, name) : '';
+
+      srcDDL = this._applyDomainNormalization(srcDDL, destEnv);
+      destDDL = this._applyDomainNormalization(destDDL, destEnv);
 
       const objDiff = this.compareTriggers(name, srcDDL, destDDL);
       if (objDiff) {
@@ -481,8 +493,8 @@ export class ComparatorService {
       const isOTE = name.startsWith('OTE_') || srcDDL.includes('OTE_') || destDDL.includes('OTE_');
 
       // Apply domain normalization (Rule #1 parity)
-      srcDDL = this._applyDomainNormalization(srcDDL);
-      destDDL = this._applyDomainNormalization(destDDL);
+      srcDDL = this._applyDomainNormalization(srcDDL, destEnv);
+      destDDL = this._applyDomainNormalization(destDDL, destEnv);
 
       let status: string;
       let alterStatements: string[] = [];
@@ -577,9 +589,9 @@ export class ComparatorService {
    * Apply domain normalization patterns to DDL content.
    * Legacy: _applyDomainNormalization
    */
-  private _applyDomainNormalization(content: string): string {
+  private _applyDomainNormalization(content: string, env?: string): string {
     if (!content) return '';
-    const norm = this.configService.getDomainNormalization();
+    const norm = this.configService.getDomainNormalization(env);
     if (norm && norm.pattern && norm.pattern instanceof RegExp) {
       return content.replace(norm.pattern, norm.replacement || '');
     }

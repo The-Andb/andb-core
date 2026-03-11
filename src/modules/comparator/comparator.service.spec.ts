@@ -590,4 +590,58 @@ describe('ComparatorService', () => {
       expect(diff.hasChanges).toBe(false);
     });
   });
+
+  describe('compareTables - AFTER/FIRST position clause', () => {
+    it('should use FIRST when new column has no prior existing column in dest', () => {
+      // src has `name` before `id`, but `name` is new (not in dest)
+      // So `name` should get FIRST, not AFTER anything
+      const srcDDL = `CREATE TABLE \`users\` (
+        \`name\` varchar(255),
+        \`id\` int
+      )`;
+      const destDDL = `CREATE TABLE \`users\` (
+        \`id\` int
+      )`;
+      const diff = service.compareTables(srcDDL, destDDL);
+      const addOp = diff.operations.find(op => op.type === 'ADD' && op.name === 'name');
+      expect(addOp).toBeDefined();
+      expect(addOp!.definition).toContain('FIRST');
+      expect(addOp!.definition).not.toContain('AFTER');
+    });
+
+    it('should use AFTER `existing_col` when prior column exists in dest', () => {
+      const srcDDL = `CREATE TABLE \`users\` (
+        \`id\` int,
+        \`name\` varchar(255),
+        \`email\` varchar(255)
+      )`;
+      const destDDL = `CREATE TABLE \`users\` (
+        \`id\` int,
+        \`email\` varchar(255)
+      )`;
+      const diff = service.compareTables(srcDDL, destDDL);
+      const addOp = diff.operations.find(op => op.type === 'ADD' && op.name === 'name');
+      expect(addOp).toBeDefined();
+      expect(addOp!.definition).toContain('AFTER `id`');
+    });
+
+    it('should handle multiple consecutive ADD columns with correct positions', () => {
+      const srcDDL = `CREATE TABLE \`users\` (
+        \`id\` int,
+        \`first_name\` varchar(255),
+        \`last_name\` varchar(255),
+        \`email\` varchar(255)
+      )`;
+      const destDDL = `CREATE TABLE \`users\` (
+        \`id\` int,
+        \`email\` varchar(255)
+      )`;
+      const diff = service.compareTables(srcDDL, destDDL);
+      const addFirst = diff.operations.find(op => op.type === 'ADD' && op.name === 'first_name');
+      const addLast = diff.operations.find(op => op.type === 'ADD' && op.name === 'last_name');
+      // Both should reference `id` as the last existing column before them
+      expect(addFirst!.definition).toContain('AFTER `id`');
+      expect(addLast!.definition).toContain('AFTER `id`');
+    });
+  });
 });

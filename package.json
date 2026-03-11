@@ -1,7 +1,7 @@
 {
   "name": "@the-andb/core",
-  "version": "4.0.0-beta.1",
-  "description": "The Andb Core Engine - Lightweight, Framework-Free",
+  "version": "4.0.0-beta.4",
+  "description": "Professional AI-driven Database Infrastructure Engine. AST-powered Safety, Semantic Diffing, and Multi-Environment Orchestration.",
   "author": "The Andb (ph4n4n)",
   "publishConfig": {
     "access": "public"
@@ -61,6 +61,7 @@
     "dotenv": "^17.2.3",
     "js-yaml": "^4.1.1",
     "mysql2": "^3.14.3",
+    "node-sql-parser": "^5.4.0",
     "simple-git": "^3.32.3",
     "ssh2": "^1.15.0"
   },

@@ -11,6 +11,15 @@ export interface IDatabaseConfig {
   [key: string]: any;
 }
 
+export interface IColumnMetadata {
+  name: string;
+  type: string;
+  isNullable: boolean;
+  defaultValue: string | null;
+  extra: string; // e.g. auto_increment
+  comment: string;
+}
+
 export interface IDatabaseDriver {
   /**
    * Connect to the database
@@ -87,6 +96,7 @@ export interface IIntrospectionService {
 
   getChecksums(dbName: string): Promise<Record<string, string>>;
   getObjectDDL(dbName: string, type: string, name: string): Promise<string>;
+  getTableColumns(dbName: string, tableName: string): Promise<IColumnMetadata[]>;
 }
 
 export interface IMonitoringService {

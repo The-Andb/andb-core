@@ -444,4 +444,52 @@ export class StorageService {
       dbPath: this.dbPath,
     };
   }
+
+  /**
+   * Search across all stored DDLs in a specific environment/database
+   */
+  async searchDDL(environment: string, database: string, query: string, flags: { caseSensitive: boolean; wholeWord: boolean; regex: boolean }) {
+    if (!this.db) return [];
+
+    // SQLite LIKE is case-insensitive by default for ASCII. 
+    // For more complex regex/wholeword, we'll fetch then filter in JS to keep core simple but powerful.
+    const stmt = this.db.prepare(`
+      SELECT ddl_type as type, ddl_name as name, ddl_content as content, updated_at
+      FROM ddl_exports
+      WHERE environment = ? AND database_name = ?
+      AND (ddl_name LIKE ? OR ddl_content LIKE ?)
+    `);
+
+    const likeQuery = `%${query}%`;
+    const rows = stmt.all(environment, database, likeQuery, likeQuery) as any[];
+
+    // If flags require specific matching (regex, case sensitive), we filter here
+    if (flags.regex || flags.caseSensitive || flags.wholeWord) {
+      let re: RegExp;
+      try {
+        if (flags.regex) {
+          re = new RegExp(query, flags.caseSensitive ? 'g' : 'gi');
+        } else {
+          const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          if (flags.wholeWord) {
+            re = new RegExp(`\\b${escaped}\\b`, flags.caseSensitive ? 'g' : 'gi');
+          } else {
+            re = new RegExp(escaped, flags.caseSensitive ? 'g' : 'gi');
+          }
+        }
+      } catch (e) {
+        re = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      }
+
+      return rows.filter(row => {
+        const nameMatch = re.test(row.name);
+        re.lastIndex = 0;
+        const contentMatch = re.test(row.content);
+        re.lastIndex = 0;
+        return nameMatch || contentMatch;
+      });
+    }
+
+    return rows;
+  }
 }

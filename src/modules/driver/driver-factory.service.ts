@@ -2,6 +2,7 @@ import { IDatabaseConfig, ConnectionType } from '../../common/interfaces/connect
 import { MysqlDriver } from './mysql/mysql.driver';
 import { IDatabaseDriver } from '../../common/interfaces/driver.interface';
 import { DumpDriver } from './dump/dump.driver';
+import { FileDriver } from './file/file.driver';
 import { ParserService } from '../parser/parser.service';
 
 export class DriverFactoryService {
@@ -14,6 +15,10 @@ export class DriverFactoryService {
 
     if (type === ConnectionType.DUMP) {
       return new DumpDriver(config, this.parser);
+    }
+
+    if (type === ConnectionType.FILE) {
+      return new FileDriver(config);
     }
 
     throw new Error(`Unsupported connection type: ${type}`);

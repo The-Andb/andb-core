@@ -7,6 +7,7 @@ export enum ConnectionType {
   POSTGRES = 'postgres',
   SQLITE = 'sqlite',
   DUMP = 'dump',
+  FILE = 'file',
 }
 
 export interface IConnection {

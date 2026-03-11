@@ -16,25 +16,55 @@ export class ProjectConfigService {
     const configPath = path.join(process.cwd(), 'andb.yaml');
     if (fs.existsSync(configPath)) {
       try {
-        this.config = yaml.load(fs.readFileSync(configPath, 'utf8')) || {};
-        this.logger.info('Loaded configuration from andb.yaml');
+        const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) || {};
+        this.config = this._interpolate(rawConfig);
+        // Normalize YAML key "environments" to internal getDBDestination
+        if (this.config.environments && !this.config.getDBDestination) {
+          this.config.getDBDestination = this.config.environments;
+        }
+        this.logger.info('Loaded configuration from andb.yaml (with env interpolation)');
       } catch (e: any) {
         this.logger.error(`Error parsing andb.yaml: ${e.message}`);
       }
     }
   }
 
+  private _interpolate(obj: any): any {
+    if (typeof obj === 'string') {
+      return obj.replace(/\${([^}]+)}/g, (_, v) => process.env[v] || '');
+    }
+    if (Array.isArray(obj)) {
+      return obj.map((i) => this._interpolate(i));
+    }
+    if (obj !== null && typeof obj === 'object') {
+      const result: any = {};
+      for (const key in obj) {
+        result[key] = this._interpolate(obj[key]);
+      }
+      return result;
+    }
+    return obj;
+  }
+
   getEnvironments(): string[] {
-    return this.config.ENVIRONMENTS || ['LOCAL', 'DEV', 'UAT', 'STAGE', 'PROD'];
+    const envMap = this.config.getDBDestination || this.config.environments || this.config.ENVIRONMENTS;
+    if (envMap && typeof envMap === 'object') {
+      return Object.keys(envMap);
+    }
+    return ['LOCAL', 'DEV', 'UAT', 'STAGE', 'PROD'];
   }
 
   getDBDestination(env: string): IDatabaseConfig | null {
-    if (!this.config.getDBDestination) return null;
-
-    // Legacy mapping: andb.yaml usually has a map of envs to configs
-    // or a function. In the YAML case, it's just a mapping.
-    const destinations = this.config.getDBDestination;
-    return destinations[env] || null;
+    const destinations = this.config.getDBDestination || this.config.environments || this.config.ENVIRONMENTS;
+    if (!destinations) {
+      this.logger.warn(`getDBDestination: No destinations found in config. Keys: ${Object.keys(this.config)}`);
+      return null;
+    }
+    const config = destinations[env] || null;
+    if (!config) {
+      this.logger.warn(`getDBDestination: Env "${env}" not found in destinations. Available: ${Object.keys(destinations)}`);
+    }
+    return config;
   }
 
   getDBName(env: string): string {
@@ -52,8 +82,24 @@ export class ProjectConfigService {
     };
   }
 
-  getDomainNormalization() {
-    return this.config.domainNormalization || { pattern: /(?!)/, replacement: '' };
+  getDomainNormalization(env?: string) {
+    const normConfig = this.config.domainNormalization;
+    if (!normConfig) return { pattern: /(?!)/, replacement: '' };
+
+    // If environment specific config exists, use it
+    const norm = (env && normConfig[env]) ? normConfig[env] : normConfig;
+
+    if (norm && norm.pattern) {
+      try {
+        const pattern = typeof norm.pattern === 'string'
+          ? new RegExp(norm.pattern, 'g')
+          : norm.pattern;
+        return { pattern, replacement: norm.replacement || '' };
+      } catch (e) {
+        this.logger.error(`Invalid domain normalization pattern: ${norm.pattern}`);
+      }
+    }
+    return { pattern: /(?!)/, replacement: '' };
   }
 
   getAutoBackup(): boolean {

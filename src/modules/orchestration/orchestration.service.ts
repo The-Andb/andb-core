@@ -11,9 +11,9 @@ export class OrchestrationService {
   constructor(
     private readonly configService: ProjectConfigService,
     private readonly features: FeatureConfigStore,
-    private readonly securityOrchestrator: SecurityOrchestrator,
-    private readonly gitOrchestrator: GitOrchestrator,
-    private readonly schemaOrchestrator: SchemaOrchestrator,
+    public readonly securityOrchestrator: SecurityOrchestrator,
+    public readonly gitOrchestrator: GitOrchestrator,
+    public readonly schemaOrchestrator: SchemaOrchestrator,
   ) { }
 
   async execute(operation: string, payload: any) {
@@ -34,8 +34,14 @@ export class OrchestrationService {
         return { success: true };
       case 'compare':
         return await this.schemaOrchestrator.compareSchema(payload);
+      case 'semanticCompare':
+        return await this.schemaOrchestrator.semanticCompare(payload);
+      case 'getSchemaNormalized':
+        return await this.schemaOrchestrator.getSchemaNormalized(payload);
       case 'migrate':
         return await this.schemaOrchestrator.migrateSchema(payload);
+      case 'search':
+        return await this.schemaOrchestrator.searchDependencies(payload);
       case 'setup-restricted-user':
         return await this.securityOrchestrator.setupRestrictedUser(payload);
       case 'generate-user-setup-script':

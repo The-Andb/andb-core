@@ -1,7 +1,7 @@
 const { getLogger } = require('andb-logger');
 import { ProjectConfigService } from '../config/project-config.service';
 import { GitOrchestrator } from './git-orchestrator.service';
-import { ISafetyReport, SafetyLevel } from '../../common/interfaces/diff.interface';
+import { ISafetyReport, SafetyLevel } from '../../common/interfaces/schema.interface';
 
 export class SchemaOrchestrator {
   private readonly logger = getLogger({ logName: 'SchemaOrchestrator' });
@@ -13,7 +13,9 @@ export class SchemaOrchestrator {
     private comparator: any,
     private exporter: any,
     private migrator: any,
+    private semanticDiff: any,
     private readonly gitOrchestrator: GitOrchestrator,
+    private readonly dependencySearch: any, // Using any for now to avoid complex type imports if not readily available
   ) { }
 
   async exportSchema(payload: any) {
@@ -68,9 +70,82 @@ export class SchemaOrchestrator {
     const srcDbName = srcConn?.config?.database || 'default';
     const destDbName = destConn?.config?.database || 'default';
 
-    return this.comparator.compareFromStorage(
+    const diff = await this.comparator.compareFromStorage(
       srcEnv, destEnv, srcDbName, destDbName, type, specificName,
     );
+
+    // Phase 2: Enrich with Semantic Diffs for Tables
+    if (type.toUpperCase() === 'TABLES' && diff.tables) {
+      if (!srcConn || !destConn) {
+        this.logger.warn(`Skipping semantic enrichment: Environment config not found for ${!srcConn ? srcEnv : destEnv}`);
+        return diff;
+      }
+
+      const srcDriver = await this.driverFactory.create(srcConn.type, srcConn.config);
+      const destDriver = await this.driverFactory.create(destConn.type, destConn.config);
+
+      try {
+        await srcDriver.connect();
+        await destDriver.connect();
+        const srcIntro = srcDriver.getIntrospectionService();
+        const destIntro = destDriver.getIntrospectionService();
+
+        for (const tableName in diff.tables) {
+          const tableDiff = diff.tables[tableName];
+          if (tableDiff.hasChanges) {
+            const srcDDL = await srcIntro.getTableDDL(srcDbName, tableName);
+            const destDDL = await destIntro.getTableDDL(destDbName, tableName);
+            if (srcDDL && destDDL) {
+              const semantic = await this.semanticDiff.compare(srcDDL, destDDL);
+              (tableDiff as any).semantic = semantic;
+            }
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`Failed to enrich semantic diff: ${err.message}`);
+      } finally {
+        await srcDriver.disconnect();
+        await destDriver.disconnect();
+      }
+    }
+
+    return diff;
+  }
+
+  async semanticCompare(payload: any) {
+    const { srcEnv, destEnv, type = 'TABLE', name } = payload;
+
+    // For now, it mostly supports single table comparison via playground or explicit names
+    // We get the DDLs from introspection
+    const srcConn = this.configService.getConnection(srcEnv);
+    const destConn = this.configService.getConnection(destEnv);
+
+    if (!srcConn || !destConn) {
+      throw new Error(`Environment config not found: ${!srcConn ? srcEnv : destEnv}`);
+    }
+
+    const srcDriver = await this.driverFactory.create(srcConn.type, srcConn.config);
+    const destDriver = await this.driverFactory.create(destConn.type, destConn.config);
+
+    try {
+      await srcDriver.connect();
+      await destDriver.connect();
+
+      const srcIntro = srcDriver.getIntrospectionService();
+      const destIntro = destDriver.getIntrospectionService();
+
+      const srcDDL = await srcIntro.getObjectDDL(srcConn.config.database || 'default', type, name);
+      const destDDL = await destIntro.getObjectDDL(destConn.config.database || 'default', type, name);
+
+      if (!srcDDL || !destDDL) {
+        throw new Error(`DDL not found for ${type} ${name}`);
+      }
+
+      return await this.semanticDiff.compare(srcDDL, destDDL);
+    } finally {
+      await srcDriver.disconnect();
+      await destDriver.disconnect();
+    }
   }
 
   async migrateSchema(payload: any) {
@@ -109,7 +184,7 @@ export class SchemaOrchestrator {
     );
 
     // 1. Safety Analysis
-    const safetyReport = this.migrator.getSafetyReport(allStatements);
+    const safetyReport = await this.migrator.getSafetyReport(allStatements);
 
     // 2. Dry Run Handler
     if (dryRun) {
@@ -139,6 +214,7 @@ export class SchemaOrchestrator {
     safetyReport: ISafetyReport,
     payload: any
   ) {
+    const { summary: impactSummary } = safetyReport as any;
     const { gitConfig, force = false } = payload;
     const successful: any[] = [];
     const failed: any[] = [];
@@ -190,7 +266,14 @@ export class SchemaOrchestrator {
         await this.handleGitSync(destEnv, dbName, successful, failed, gitConfig);
       }
 
-      return { success: true, successful, failed, dryRun: false, safetyLevel: safetyReport.level };
+      return {
+        success: true,
+        successful,
+        failed,
+        dryRun: false,
+        safetyLevel: safetyReport.level,
+        impact: impactSummary
+      };
     } finally {
       await destDriver.disconnect();
     }
@@ -253,7 +336,7 @@ export class SchemaOrchestrator {
     }
   }
 
-  private async getDriverFromConnection(connection: any) {
+  public async getDriverFromConnection(connection: any) {
     const config = {
       host: connection.host,
       port: connection.port,
@@ -264,5 +347,47 @@ export class SchemaOrchestrator {
     const connType =
       (connection as any).type === 'dump' || connection.host === 'file' ? 'dump' : 'mysql';
     return await this.driverFactory.create(connType, config);
+  }
+
+  async getSchemaNormalized(payload: any) {
+    const { env, db = 'default' } = payload;
+    const conn = this.configService.getConnection(env);
+    if (!conn) throw new Error(`Connection not found: ${env}`);
+
+    const driver = await this.driverFactory.create(conn.type, conn.config);
+    try {
+      await driver.connect();
+      const intro = driver.getIntrospectionService();
+      const tables = await intro.listTables(db);
+
+      const result: Record<string, any> = { tables: {} };
+
+      for (const table of tables) {
+        const ddl = await intro.getTableDDL(db, table);
+        if (ddl) {
+          result.tables[table] = {
+            name: table,
+            ddl: ddl.trim(),
+          };
+        }
+      }
+      return result;
+    } finally {
+      await driver.disconnect();
+    }
+  }
+
+  async searchDependencies(payload: any) {
+    const { connection, query, flags } = payload;
+    const dbName = connection.database || connection.name || 'default';
+    
+    // We search locally in SQLite as per user's request
+    return await this.dependencySearch.searchLocal(
+      this.storageService,
+      connection.environment,
+      dbName,
+      query,
+      flags
+    );
   }
 }

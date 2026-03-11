@@ -286,4 +286,29 @@ export class MysqlIntrospectionService implements IIntrospectionService {
     if (t === 'EVENT') return this.getEventDDL(dbName, name);
     return '';
   }
+
+  async getTableColumns(dbName: string, tableName: string): Promise<any[]> {
+    const results = await this.driver.query<RowDataPacket[]>(
+      `SELECT 
+        COLUMN_NAME as name, 
+        DATA_TYPE as type, 
+        IS_NULLABLE as isNullable, 
+        COLUMN_DEFAULT as defaultValue, 
+        EXTRA as extra, 
+        COLUMN_COMMENT as comment
+      FROM information_schema.COLUMNS 
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+      ORDER BY ORDINAL_POSITION`,
+      [dbName, tableName],
+    );
+
+    return results.map(row => ({
+      name: row.name,
+      type: row.type,
+      isNullable: row.isNullable === 'YES',
+      defaultValue: row.defaultValue,
+      extra: row.extra,
+      comment: row.comment,
+    }));
+  }
 }

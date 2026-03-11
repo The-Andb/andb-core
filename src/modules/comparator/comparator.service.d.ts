@@ -1,0 +1,47 @@
+import { ParserService } from '../parser/parser.service';
+import { ITableDiff, IObjectDiff, ISchemaDiff } from '../../common/interfaces/diff.interface';
+import { IIntrospectionService } from '../../common/interfaces/driver.interface';
+export declare class ComparatorService {
+    private readonly parser;
+    private readonly storageService;
+    private readonly configService;
+    private readonly logger;
+    private readonly migrator;
+    private readonly TRIGGERS;
+    private readonly TABLES;
+    constructor(parser: ParserService, storageService: any, configService: any);
+    compareTables(srcDDL: string, destDDL: string): ITableDiff;
+    private _normalizeDef;
+    private compareColumns;
+    private compareIndexes;
+    private compareForeignKeys;
+    compareGenericDDL(type: 'VIEW' | 'PROCEDURE' | 'FUNCTION' | 'EVENT', name: string, srcDDL: string, destDDL: string): IObjectDiff | null;
+    compareTriggers(name: string, srcDDL: string, destDDL: string): IObjectDiff | null;
+    compareSchema(src: IIntrospectionService, dest: IIntrospectionService, srcDbName: string, destDbName?: string, destEnv?: string): Promise<ISchemaDiff>;
+    private _listObjects;
+    private _getDDL;
+    compareFromStorage(srcEnv: string, destEnv: string, srcDbName: string, destDbName: string, ddlType: string, specificName?: string): Promise<any[]>;
+    private _applyDomainNormalization;
+    reportDLLChange(srcEnv: string, type: string, destEnv: string, specificName?: string): Promise<any[]>;
+    reportTriggerChange(srcEnv: string, destEnv: string, specificName?: string): Promise<any[]>;
+    loadDDLContent(srcEnv: string, destEnv: string, type: string, name?: string): Promise<{
+        srcLines: any;
+        destLines: any;
+    }>;
+    _getDDLContent(env: string, type: string, name: string): Promise<any>;
+    checkDiffAndGenAlter(tableName: string, env: string): Promise<any>;
+    findDDLChanged2Migrate(srcEnv: string, type: string, destEnv: string): Promise<any[]>;
+    private _processUpdatedLines;
+    private _processEqualLines;
+    handleTriggerComparison(srcEnv: string, destEnv: string, srcDbName: string, destDbName: string, specificName?: string): Promise<any[]>;
+    private parseTriggerList;
+    private compareTriggerLists;
+    private findDuplicateTriggers;
+    private logDuplicateTriggerWarnings;
+    logDiff(src: string, dest: string): void;
+    private _logDetailedDiff;
+    private _hasRealChange;
+    reportTableStructureChange(envName: string, tables: string[], specificName?: string): Promise<void>;
+    setupMigrationFolder(srcEnv: string, destEnv: string, dbName: string): string;
+    private isSkipObject;
+}

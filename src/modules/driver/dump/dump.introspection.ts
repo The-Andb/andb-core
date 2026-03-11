@@ -66,4 +66,8 @@ export class DumpIntrospectionService implements IIntrospectionService {
     if (t === 'EVENT') return this.getEventDDL(db, name);
     return '';
   }
+
+  async getTableColumns(db: string, tableName: string): Promise<any[]> {
+    return [];
+  }
 }

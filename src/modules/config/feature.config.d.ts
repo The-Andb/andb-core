@@ -1,0 +1,20 @@
+export declare const featureConfig: {
+    mcpServer: boolean;
+    gitSync: boolean;
+    schemaReport: boolean;
+    driftDetection: boolean;
+    betaGate: boolean;
+    bugReport: boolean;
+    featureSuggest: boolean;
+    dbDesigner: boolean;
+    autoBackup: boolean;
+    focusColumnMode: boolean;
+    erDiagram: boolean;
+    quickDumpCompare: boolean;
+    liveDemo: boolean;
+    domainLogic: boolean;
+    restrictedUser: boolean;
+    snapshotRestore: boolean;
+};
+export type FeatureConfigStore = typeof featureConfig;
+export declare const FEATURE_CONFIG_TOKEN = "FEATURE_CONFIG";

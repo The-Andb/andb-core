@@ -90,8 +90,11 @@ describe('MigratorService', () => {
       expect(service.getSafetyLevel('truncate table logs')).toBe('CRITICAL');
     });
 
-    it('should classify DROP COLUMN/MODIFY as WARNING', () => {
-      expect(service.getSafetyLevel('ALTER TABLE users DROP COLUMN age')).toBe('WARNING');
+    it('should classify DROP COLUMN as CRITICAL', () => {
+      expect(service.getSafetyLevel('ALTER TABLE users DROP COLUMN age')).toBe('CRITICAL');
+    });
+
+    it('should classify MODIFY as WARNING', () => {
       expect(service.getSafetyLevel('ALTER TABLE users MODIFY COLUMN name varchar(255)')).toBe('WARNING');
     });
 
@@ -100,17 +103,17 @@ describe('MigratorService', () => {
       expect(service.getSafetyLevel('CREATE TABLE new_table (id int)')).toBe('SAFE');
     });
 
-    it('should generate a structured safety report', () => {
+    it('should generate a structured safety report', async () => {
       const statements = [
         'CREATE TABLE test (id int)',
         'ALTER TABLE users DROP COLUMN age',
         'DROP TABLE legacy_data'
       ];
-      const report = service.getSafetyReport(statements);
+      const report = await service.getSafetyReport(statements);
 
       expect(report.level).toBe('CRITICAL');
-      expect(report.summary.critical).toHaveLength(1);
-      expect(report.summary.warning).toHaveLength(1);
+      expect(report.summary.critical).toHaveLength(2);
+      expect(report.summary.warning).toHaveLength(0);
       expect(report.summary.safe).toHaveLength(1);
       expect(report.hasDestructive).toBe(true);
     });

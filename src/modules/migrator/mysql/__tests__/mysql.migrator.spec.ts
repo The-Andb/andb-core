@@ -183,6 +183,34 @@ describe('MysqlMigrator', () => {
       const sqls = migrator.generateTableAlterSQL(diff);
       expect(sqls[0]).toContain('DROP INDEX `idx_email`');
     });
+
+    it('should strip leaked AFTER clause from index definitions', () => {
+      const diff: ITableDiff = {
+        tableName: 'users',
+        hasChanges: true,
+        operations: [
+          { type: 'ADD', target: 'INDEX', name: 'idx_name', definition: 'KEY `idx_name` (`name`) AFTER `id`' }
+        ]
+      };
+
+      const sqls = migrator.generateTableAlterSQL(diff);
+      expect(sqls[0]).toContain('ADD KEY `idx_name` (`name`)');
+      expect(sqls[0]).not.toContain('AFTER');
+    });
+
+    it('should strip leaked FIRST clause from index definitions', () => {
+      const diff: ITableDiff = {
+        tableName: 'users',
+        hasChanges: true,
+        operations: [
+          { type: 'ADD', target: 'INDEX', name: 'ft_title', definition: 'FULLTEXT KEY `ft_title` (`title`) FIRST' }
+        ]
+      };
+
+      const sqls = migrator.generateTableAlterSQL(diff);
+      expect(sqls[0]).toContain('ADD FULLTEXT KEY `ft_title` (`title`)');
+      expect(sqls[0]).not.toContain('FIRST');
+    });
   });
 });
 

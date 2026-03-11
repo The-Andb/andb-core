@@ -151,3 +151,23 @@ export interface ISchemaDiff {
     objectsChanged: number;
   };
 }
+
+// Semantic Diffing (Phase 2)
+export interface ISemanticChange {
+  type: string; // e.g., 'DATATYPE_CHANGE', 'NULLABILITY_CHANGE', 'DEFAULT_VALUE_CHANGE'
+  property: string; // e.g., 'type', 'isNullable', 'defaultValue'
+  oldValue: any;
+  newValue: any;
+  description: string;
+}
+
+export interface ISemanticObjectDiff {
+  name: string;
+  type: string; // 'TABLE', 'COLUMN', 'INDEX', etc.
+  changes: ISemanticChange[];
+}
+
+export interface ISemanticReport {
+  tables: Record<string, ISemanticObjectDiff>;
+  summary: string[]; // High-level human readable strings
+}
