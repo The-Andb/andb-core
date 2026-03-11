@@ -1,29 +1,29 @@
-# The Andb Core (Framework) 🚀
+# The Andb Core Engine 🚀
 
-**The Premium Database Orchestration Engine — Rebuilt for the Future.**
-Intelligent Schema Management, Seamless Synchronization, and High-Fidelity Reporting, now powered by **Framework** and **TypeScript**.
+**The Professional AI-Driven Database Infrastructure Engine.**
+AST-powered Safety, Deep Semantic Analysis, and Professional Orchestration.
 
 ---
 
 ## 🌟 Overview
 
-**The Andb Core (Nest)** is a complete rewrite of the heart of The Andb Orchestrator ecosystem. By leveraging Framework and TypeScript, we provide an even more robust, type-safe, and modular engine to manage database schemas across multiple environments (DEV, STAGE, PROD) with absolute precision.
+**The Andb Core** is the high-performance engine powering the entire Andb ecosystem. Optimized for the **AI-First Era (2026)**, it provides the bridge between natural language reasoning and reliable database schema management.
 
-This rewrite follows our **"Twin Engine" strategy**, building the new engine side-by-side with the legacy one to ensure 100% feature parity and a seamless transition.
+This engine doesn't just "compare text"; it **understands intent** through AST (Abstract Syntax Tree) analysis, protecting your production environments from destructive operations and providing human-level semantic insights.
 
-## ✨ New in the Framework Rewrite
+## ✨ Intelligent Features
 
-- 🏗️ **Modularity**: Clean Framework module system for better maintainability and extensibility.
-- 🛡️ **Type Safety**: Full TypeScript implementation for robust and bug-free development.
-- 💎 **Improved Drivers**: Refined Strategy Pattern for database drivers, including a new `DumpDriver` for offline schema analysis.
-- 🚀 **Modern CLI**: Built with `nest-commander` for a more intuitive and powerful command-line experience.
+- 🧠 **The Advisor (Safety Engine)**: Full AST-based SQL analysis. Detects destructive operations (DROP, TRUNCATE) and "Metadata Lock" hazards (Full Table Rebuilds) with high precision.
+- 📝 **Semantic Diffing**: Goes beyond SQL code to provide human-readable descriptions of changes (e.g., "Column type changed: VARCHAR -> ENUM").
+- 🤖 **AI-Agent Ready (MCP)**: Native support for the Model Context Protocol. AI agents (Cursor, Claude, GPT) can now reason about your DB schema via standardized, normalized SQL views.
+- 🏗️ **Professional Orchestration**: Single API for comparison, migration, export, and secure user management across multiple environments.
 
-## 📦 Core Features
+## 📦 Core Capabilities
 
-- 💎 **Premium Intelligence**: Advanced comparison engine for Tables, Views, Procedures, Functions, Triggers, and Events.
-- 📊 **High-Fidelity Reporting**: Industry-leading HTML reports with dark-mode aesthetics and dynamic data visualization.
-- 🏗️ **"Zero to Hero" Architecture**: Clean dependency injection and pluggable storage strategies.
-- 🛡️ **Session Hygiene**: Automatic handling of foreign key checks and session modes for safe migrations.
+- 💎 **Premium Intelligence**: Advanced comparison for Tables, Views, Procedures, Functions, Triggers, and Events.
+- 📊 **Normalized SQL**: Generates standardized DDLs, making it easier for both humans and AI to identify structural drift.
+- 🛡️ **Session Hygiene**: Automatic handling of foreign key checks and safe session modes for zero-downtime migrations.
+- 🔌 **Pluggable Drivers**: High-performance MySQL and Dump (offline storage) drivers.
 
 ## 🚀 Quick Start
 
@@ -59,18 +59,22 @@ andb generate
 ```text
 core/
 ├── src/
-│   ├── cli/          # Command-line interface commands (nest-commander)
-│   ├── common/       # Interfaces, constants, and shared types
-│   └── modules/      # Core logic organized into Framework modules
-│       ├── comparator/ # Schema comparison logic
-│       ├── driver/     # Database drivers (MySQL, Dump)
-│       ├── migrator/   # SQL generation for migrations
-│       └── parser/     # SQL/DDL parsing and normalization
-├── scripts/          # E2E and unit tests
-└── ai/               # AI memory, plans, and architectural decisions
+│   ├── common/       # Interfaces and shared types
+│   ├── modules/      # Core logic
+│   │   ├── comparator/# Schema comparison & Semantic Diff
+│   │   ├── driver/    # Database drivers (MySQL, Dump)
+│   │   ├── migrator/  # SQL generation & Safety Guards
+│   │   ├── safety/    # AST-based Impact Analysis (The Advisor)
+│   │   └── parser/    # SQL/DDL parsing and AST logic
+│   └── index.ts      # Public API entry point
 ```
 
-## 🤝 Roadmap & Parity
+## 📚 Documentation
+
+- [Advisor Tooling (Safety & Semantic)](./docs/ADVISOR_EN.md)
+- [AI Agent Integration (MCP)](./docs/MCP_EN.md)
+- [CLI Reference](./docs/CLI_EN.md)
+- [Architecture Overview](./docs/architecture/ARCHITECTURE.md)
 
 We are currently in **Phase 4.5** of our master plan. Our goal is 100% parity with the legacy `@the-andb/core` package before a full switchover.
 
@@ -78,7 +82,6 @@ We are currently in **Phase 4.5** of our master plan. Our goal is 100% parity wi
 - [x] MySQL Driver & Dump Driver
 - [x] Schema Comparison (Tables, Views, Routines, Triggers)
 - [x] CLI Parity (`generate`, `helper`)
-- [ ] UI Integration (Phase 5)
 
 ## 📄 License & Commercial
 

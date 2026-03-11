@@ -74,7 +74,7 @@ Tools to safely apply schema changes.
 
 ## How it Works
 
-1. **Discovery**: The generator reads your `package.json` to find the base project path.
+1. **Discovery**: The generator reads your `package.json` to find Project project path.
 2. **Analysis**: It determines the target environments from `andb.yaml`, CLI flags, or environment variables (in that order of priority).
 3. **Template Rendering**: It builds the appropriate `andb` commands for each environment/operation combination.
 4. **Injection**: It updates the `scripts` section of your `package.json` with the new commands, preserving existing scripts.
