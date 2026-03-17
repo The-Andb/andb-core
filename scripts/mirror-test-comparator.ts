@@ -6,7 +6,7 @@ import * as assert from 'assert';
 console.log('🧪 Starting Mirror Test: Comparator Service');
 
 const parser = new ParserService();
-const comparator = new ComparatorService(parser);
+const comparator = new ComparatorService(parser, {} as any, {} as any);
 
 // --- Test Case 1: Identical Tables ---
 const ddl1 = `CREATE TABLE \`users\` (

@@ -587,7 +587,7 @@ describe('ComparatorService', () => {
     it('should handle unparseable src table', () => {
       const diff = service.compareTables('SELECT 1', 'SELECT 2');
       expect(diff.tableName).toBe('unknown');
-      expect(diff.hasChanges).toBe(false);
+      expect(diff.hasChanges).toBe(true);
     });
   });
 

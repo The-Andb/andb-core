@@ -122,4 +122,33 @@ describe('ExporterService', () => {
       expect(summary.TRIGGERS).toBe(1);
     });
   });
+
+  describe('exportTableData', () => {
+    beforeEach(() => {
+      mockDriver.query = jest.fn().mockResolvedValue([
+        { id: 1, name: 'Alice', created_at: new Date('2026-01-01') },
+        { id: 2, name: 'Bob', created_at: new Date('2026-02-01') },
+      ]);
+    });
+
+    it('should export data as JSON', async () => {
+      const result = await service.exportTableData('dev', 'users', 'json', '/tmp/users.json');
+      expect(result.count).toBe(2);
+      expect(fs.writeFileSync).toHaveBeenCalledWith('/tmp/users.json', expect.stringContaining('"Alice"'));
+    });
+
+    it('should export data as CSV', async () => {
+      const result = await service.exportTableData('dev', 'users', 'csv', '/tmp/users.csv');
+      expect(result.count).toBe(2);
+      expect(fs.writeFileSync).toHaveBeenCalledWith('/tmp/users.csv', expect.stringContaining('id,name,created_at'));
+      expect(fs.writeFileSync).toHaveBeenCalledWith('/tmp/users.csv', expect.stringContaining('1,"Alice"'));
+    });
+
+    it('should handle empty data', async () => {
+      mockDriver.query.mockResolvedValue([]);
+      const result = await service.exportTableData('dev', 'users', 'csv', '/tmp/empty.csv');
+      expect(result.count).toBe(0);
+      expect(fs.writeFileSync).toHaveBeenCalledWith('/tmp/empty.csv', '');
+    });
+  });
 });

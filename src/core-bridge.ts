@@ -8,7 +8,7 @@ export class CoreBridge {
   /**
    * Initialize the Core Engine (Singleton with Lock)
    */
-  public static async init(userDataPath?: string) {
+  public static async init(userDataPath?: string, customDbPath?: string) {
     if (this.container) return this.container;
 
     if (this.initPromise) {
@@ -18,11 +18,13 @@ export class CoreBridge {
     this.initPromise = (async () => {
       console.log('🚀 [CoreBridge] Initializing Engine...');
       const path = require('path');
-      const dbPath = userDataPath
-        ? path.join(userDataPath, 'andb-storage.db')
-        : undefined;
+      
+      let dbPath = customDbPath;
+      if (!dbPath && userDataPath) {
+        dbPath = path.join(userDataPath, 'andb-storage.db');
+      }
 
-      this.container = Container.create(dbPath);
+      this.container = await Container.create(dbPath);
       console.log('✅ [CoreBridge] Engine Ready.');
       return this.container;
     })();

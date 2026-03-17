@@ -1,116 +1,33 @@
 const { getLogger } = require('andb-logger');
-import Database = require('better-sqlite3');
-import * as path from 'path';
-import * as fs from 'fs';
+import { IStorageDriver } from './interfaces/storage-driver.interface';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 export class StorageService {
   private readonly logger = getLogger({ logName: 'StorageService' });
-  private db: Database.Database | null = null;
-  private dbPath: string = '';
+  private driver: IStorageDriver | null = null;
 
-  initialize(dbPath: string) {
-    if (this.db) {
-      if (this.dbPath === dbPath) return;
-      this.close();
+  async initialize(driver: IStorageDriver, dbPath: string) {
+    if (this.driver) {
+      if (this.driver.getDbPath() === dbPath) return;
+      await this.close();
     }
 
-    this.dbPath = dbPath;
-    const dir = path.dirname(dbPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
+    this.driver = driver;
     if (!process.env.ANDB_QUIET) {
-      this.logger.info(`Initializing SQLite storage at: ${dbPath}`);
+      this.logger.info(`Initializing storage at: ${dbPath} using ${driver.constructor.name}`);
     }
-    this.db = new Database(dbPath);
-    this._initSchema();
+    await this.driver.initialize(dbPath);
   }
 
-  private _initSchema() {
-    if (!this.db) return;
 
-    // Basic tables with COLLATE NOCASE for legacy parity
-    const schema = `
-      CREATE TABLE IF NOT EXISTS ddl_exports (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        environment TEXT NOT NULL COLLATE NOCASE,
-        database_name TEXT NOT NULL COLLATE NOCASE,
-        ddl_type TEXT NOT NULL COLLATE NOCASE,
-        ddl_name TEXT NOT NULL COLLATE NOCASE,
-        ddl_content TEXT NOT NULL,
-        checksum TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        exported_to_file INTEGER DEFAULT 0,
-        file_path TEXT,
-        UNIQUE(environment, database_name, ddl_type, ddl_name)
-      );
 
-      CREATE TABLE IF NOT EXISTS comparisons (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        src_environment TEXT NOT NULL COLLATE NOCASE,
-        dest_environment TEXT NOT NULL COLLATE NOCASE,
-        database_name TEXT NOT NULL COLLATE NOCASE,
-        ddl_type TEXT NOT NULL COLLATE NOCASE,
-        ddl_name TEXT NOT NULL COLLATE NOCASE,
-        status TEXT NOT NULL,
-        src_ddl_id INTEGER,
-        dest_ddl_id INTEGER,
-        diff_summary TEXT,
-        alter_statements TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        exported_to_file INTEGER DEFAULT 0,
-        file_path TEXT,
-        UNIQUE(src_environment, dest_environment, database_name, ddl_type, ddl_name)
-      );
-
-      CREATE TABLE IF NOT EXISTS migration_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        src_environment TEXT NOT NULL COLLATE NOCASE,
-        dest_environment TEXT NOT NULL COLLATE NOCASE,
-        database_name TEXT NOT NULL COLLATE NOCASE,
-        ddl_type TEXT NOT NULL COLLATE NOCASE,
-        ddl_name TEXT NOT NULL COLLATE NOCASE,
-        operation TEXT NOT NULL,
-        status TEXT NOT NULL,
-        error_message TEXT,
-        executed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        executed_by TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS ddl_snapshots (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        environment TEXT NOT NULL COLLATE NOCASE,
-        database_name TEXT NOT NULL COLLATE NOCASE,
-        ddl_type TEXT NOT NULL COLLATE NOCASE,
-        ddl_name TEXT NOT NULL COLLATE NOCASE,
-        ddl_content TEXT NOT NULL,
-        checksum TEXT,
-        version_tag TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS metadata (
-        key TEXT PRIMARY KEY,
-        value TEXT,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_ddl_lookup ON ddl_exports(environment, database_name);
-      CREATE INDEX IF NOT EXISTS idx_comp_lookup ON comparisons(src_environment, dest_environment);
-      CREATE INDEX IF NOT EXISTS idx_snapshot_lookup ON ddl_snapshots(environment, database_name, ddl_type, ddl_name);
-    `;
-
-    this.db.exec(schema);
-  }
-
-  close() {
-    if (this.db) {
-      this.db.close();
-      this.db = null;
+  async close() {
+    if (this.driver) {
+      await this.driver.close();
+      this.driver = null;
     }
   }
 
@@ -123,10 +40,10 @@ export class StorageService {
     name: string,
     content: string,
   ) {
-    if (!this.db) return;
+    if (!this.driver) return;
     type = type.toUpperCase(); // Normalize: always store as TABLES, VIEWS, etc.
     const checksum = crypto.createHash('md5').update(content).digest('hex');
-    const stmt = this.db.prepare(`
+    const sql = `
       INSERT INTO ddl_exports (environment, database_name, ddl_type, ddl_name, ddl_content, checksum, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(environment, database_name, ddl_type, ddl_name) DO UPDATE SET
@@ -134,13 +51,13 @@ export class StorageService {
         checksum = excluded.checksum,
         updated_at = CURRENT_TIMESTAMP,
         exported_to_file = 0
-    `);
-    return stmt.run(environment, database, type, name, content, checksum);
+    `;
+    return this.driver.execute(sql, [environment, database, type, name, content, checksum]);
   }
 
   async saveDDLBatch(environment: string, database: string, type: string, items: { name: string; content: string }[]) {
-    if (!this.db) return;
-    const stmt = this.db.prepare(`
+    if (!this.driver) return;
+    const sql = `
       INSERT INTO ddl_exports (environment, database_name, ddl_type, ddl_name, ddl_content, checksum, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(environment, database_name, ddl_type, ddl_name) DO UPDATE SET
@@ -148,72 +65,67 @@ export class StorageService {
         checksum = excluded.checksum,
         updated_at = CURRENT_TIMESTAMP,
         exported_to_file = 0
-    `);
+    `;
 
-    const transaction = this.db.transaction((items) => {
+    return this.driver.transaction(async (driver) => {
       for (const item of items) {
         const checksum = crypto.createHash('md5').update(item.content).digest('hex');
-        stmt.run(environment, database, type, item.name, item.content, checksum);
+        await driver.execute(sql, [environment, database, type, item.name, item.content, checksum]);
       }
     });
-
-    return transaction(items);
   }
 
   async getDDL(environment: string, database: string, type: string, name: string) {
-    if (!this.db) return null;
-    const stmt = this.db.prepare(`
+    if (!this.driver) return null;
+    const sql = `
       SELECT ddl_content FROM ddl_exports 
       WHERE environment = ? AND database_name = ? AND ddl_type = ? AND ddl_name = ?
-    `);
-    const row = stmt.get(environment, database, type, name) as any;
+    `;
+    const row = await this.driver.queryOne(sql, [environment, database, type, name]) as any;
     return row ? row.ddl_content : null;
   }
 
   async getDDLObjects(environment: string, database: string, type: string) {
-    if (!this.db) return [];
+    if (!this.driver) return [];
     type = type.toUpperCase(); // Normalize: match saved format
-    const stmt = this.db.prepare(`
+    const sql = `
       SELECT ddl_name as name, ddl_content as content, updated_at 
       FROM ddl_exports 
       WHERE environment = ? AND database_name = ? AND ddl_type = ?
       ORDER BY ddl_name ASC
-    `);
-    return stmt.all(environment, database, type);
+    `;
+    return this.driver.queryAll(sql, [environment, database, type]);
   }
 
   async getDDLList(environment: string, database: string, type: string) {
-    if (!this.db) return [];
-    const stmt = this.db.prepare(`
+    if (!this.driver) return [];
+    const sql = `
       SELECT ddl_name FROM ddl_exports 
       WHERE environment = ? AND database_name = ? AND ddl_type = ?
       ORDER BY ddl_name ASC
-    `);
-    return (stmt.all(environment, database, type) as any[]).map(r => r.ddl_name);
+    `;
+    const rows = await this.driver.queryAll(sql, [environment, database, type]) as any[];
+    return rows.map(r => r.ddl_name);
   }
 
   async getEnvironments() {
-    if (!this.db) return [];
-    const stmt = this.db.prepare(
-      'SELECT DISTINCT environment FROM ddl_exports ORDER BY environment ASC',
-    );
-    return stmt.all().map((r: any) => r.environment);
+    if (!this.driver) return [];
+    const sql = 'SELECT DISTINCT environment FROM ddl_exports ORDER BY environment ASC';
+    const rows = await this.driver.queryAll(sql) as any[];
+    return rows.map((r: any) => r.environment);
   }
 
   async getDatabases(environment: string) {
-    if (!this.db) return [];
-    const stmt = this.db.prepare(
-      'SELECT DISTINCT database_name FROM ddl_exports WHERE environment = ? ORDER BY database_name ASC',
-    );
-    return stmt.all(environment).map((r: any) => r.database_name);
+    if (!this.driver) return [];
+    const sql = 'SELECT DISTINCT database_name FROM ddl_exports WHERE environment = ? ORDER BY database_name ASC';
+    const rows = await this.driver.queryAll(sql, [environment]) as any[];
+    return rows.map((r: any) => r.database_name);
   }
 
   async getLastUpdated(environment: string, database: string) {
-    if (!this.db) return null;
-    const stmt = this.db.prepare(
-      'SELECT MAX(updated_at) as last_updated FROM ddl_exports WHERE environment = ? AND database_name = ?',
-    );
-    const row = stmt.get(environment, database) as any;
+    if (!this.driver) return null;
+    const sql = 'SELECT MAX(updated_at) as last_updated FROM ddl_exports WHERE environment = ? AND database_name = ?';
+    const row = await this.driver.queryOne(sql, [environment, database]) as any;
     return row ? row.last_updated : null;
   }
 
@@ -230,8 +142,8 @@ export class StorageService {
     alterStatements?: any;
     diffSummary?: string;
   }) {
-    if (!this.db) return;
-    const stmt = this.db.prepare(`
+    if (!this.driver) return;
+    const sql = `
       INSERT INTO comparisons (src_environment, dest_environment, database_name, ddl_type, ddl_name, status, alter_statements, diff_summary, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(src_environment, dest_environment, database_name, ddl_type, ddl_name) DO UPDATE SET
@@ -239,7 +151,7 @@ export class StorageService {
         alter_statements = excluded.alter_statements,
         diff_summary = excluded.diff_summary,
         updated_at = CURRENT_TIMESTAMP
-    `);
+    `;
 
     let alters = comp.alterStatements || comp.ddl || [];
     if (typeof alters === 'string') {
@@ -254,7 +166,7 @@ export class StorageService {
       }
     }
 
-    return stmt.run(
+    return this.driver.execute(sql, [
       comp.srcEnv,
       comp.destEnv,
       comp.database,
@@ -263,17 +175,17 @@ export class StorageService {
       comp.status,
       JSON.stringify(alters),
       comp.diffSummary || null,
-    );
+    ]);
   }
 
   async getComparisons(srcEnv: string, destEnv: string, database: string, type: string) {
-    if (!this.db) return [];
-    const stmt = this.db.prepare(`
+    if (!this.driver) return [];
+    const sql = `
       SELECT * FROM comparisons
       WHERE src_environment = ? AND dest_environment = ? AND database_name = ? AND ddl_type = ?
       ORDER BY status ASC, ddl_name ASC
-    `);
-    const rows = stmt.all(srcEnv, destEnv, database, type) as any[];
+    `;
+    const rows = await this.driver.queryAll(sql, [srcEnv, destEnv, database, type]) as any[];
     return rows.map((row) => this._mapComparisonToUI(row));
   }
 
@@ -284,13 +196,13 @@ export class StorageService {
     type: string,
     status: string,
   ) {
-    if (!this.db) return [];
-    const stmt = this.db.prepare(`
+    if (!this.driver) return [];
+    const sql = `
       SELECT * FROM comparisons
       WHERE src_environment = ? AND dest_environment = ? AND database_name = ? AND ddl_type = ? AND status = ?
       ORDER BY ddl_name ASC
-    `);
-    const rows = stmt.all(srcEnv, destEnv, database, type, status) as any[];
+    `;
+    const rows = await this.driver.queryAll(sql, [srcEnv, destEnv, database, type, status]) as any[];
     return rows.map((row) => this._mapComparisonToUI(row));
   }
 
@@ -315,14 +227,14 @@ export class StorageService {
   }
 
   async getLatestComparisons(limit: number = 50) {
-    if (!this.db) return [];
-    const stmt = this.db.prepare(`
+    if (!this.driver) return [];
+    const sql = `
       SELECT DISTINCT src_environment, dest_environment, database_name, ddl_type, updated_at
       FROM comparisons
       ORDER BY updated_at DESC
       LIMIT ?
-    `);
-    return stmt.all(limit);
+    `;
+    return this.driver.queryAll(sql, [limit]);
   }
 
   // --- Snapshot Operations ---
@@ -335,32 +247,32 @@ export class StorageService {
     ddl: string,
     tag?: string,
   ) {
-    if (!this.db) return;
+    if (!this.driver) return;
     const checksum = crypto.createHash('md5').update(ddl || '').digest('hex');
-    const stmt = this.db.prepare(`
+    const sql = `
       INSERT INTO ddl_snapshots (environment, database_name, ddl_type, ddl_name, ddl_content, checksum, version_tag)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    return stmt.run(environment, database, type, name, ddl, checksum, tag || null);
+    `;
+    return this.driver.execute(sql, [environment, database, type, name, ddl, checksum, tag || null]);
   }
 
   async getSnapshots(environment: string, database: string, type: string, name: string) {
-    if (!this.db) return [];
-    const stmt = this.db.prepare(`
+    if (!this.driver) return [];
+    const sql = `
       SELECT id, ddl_content, version_tag, created_at, checksum
       FROM ddl_snapshots
       WHERE environment = ? AND database_name = ? AND ddl_type = ? AND ddl_name = ?
       ORDER BY created_at DESC
-    `);
-    return stmt.all(environment, database, type, name);
+    `;
+    return this.driver.queryAll(sql, [environment, database, type, name]);
   }
 
   async getAllSnapshots(limit: number = 200) {
-    if (!this.db) return [];
-    const stmt = this.db.prepare(`
+    if (!this.driver) return [];
+    const sql = `
        SELECT * FROM ddl_snapshots ORDER BY created_at DESC LIMIT ?
-     `);
-    return stmt.all(limit);
+     `;
+    return this.driver.queryAll(sql, [limit]);
   }
 
   // --- Migration Operations ---
@@ -375,12 +287,12 @@ export class StorageService {
     status: string;
     error?: string;
   }) {
-    if (!this.db) return;
-    const stmt = this.db.prepare(`
+    if (!this.driver) return;
+    const sql = `
       INSERT INTO migration_history (src_environment, dest_environment, database_name, ddl_type, ddl_name, operation, status, error_message)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    return stmt.run(
+    `;
+    return this.driver.execute(sql, [
       history.srcEnv,
       history.destEnv,
       history.database,
@@ -389,42 +301,40 @@ export class StorageService {
       history.operation,
       history.status,
       history.error || null,
-    );
+    ]);
   }
 
   async getMigrationHistory(limit: number = 100) {
-    if (!this.db) return [];
-    const stmt = this.db.prepare(
-      'SELECT * FROM migration_history ORDER BY executed_at DESC LIMIT ?',
-    );
-    return stmt.all(limit);
+    if (!this.driver) return [];
+    const sql = 'SELECT * FROM migration_history ORDER BY executed_at DESC LIMIT ?';
+    return this.driver.queryAll(sql, [limit]);
   }
 
   // --- Maintenance ---
 
   async clearConnectionData(environment: string, database: string) {
-    if (!this.db) return { ddlCount: 0, comparisonCount: 0 };
+    if (!this.driver) return { ddlCount: 0, comparisonCount: 0 };
 
-    const transaction = this.db.transaction(() => {
-      const ddl = this.db!.prepare(
+    return this.driver.transaction(async (driver) => {
+      const ddl = await driver.execute(
         'DELETE FROM ddl_exports WHERE environment = ? AND database_name = ?',
-      ).run(environment, database);
-      const comp = this.db!.prepare(
+        [environment, database]
+      );
+      const comp = await driver.execute(
         'DELETE FROM comparisons WHERE (src_environment = ? OR dest_environment = ?) AND database_name = ?',
-      ).run(environment, environment, database);
+        [environment, environment, database]
+      );
       return { ddlCount: ddl.changes, comparisonCount: comp.changes };
     });
-
-    return transaction();
   }
 
   async clearAll() {
-    if (!this.db) return { ddl: 0, comparison: 0, snapshot: 0, migration: 0 };
-    const transaction = this.db.transaction(() => {
-      const ddl = this.db!.prepare('DELETE FROM ddl_exports').run();
-      const comp = this.db!.prepare('DELETE FROM comparisons').run();
-      const snap = this.db!.prepare('DELETE FROM ddl_snapshots').run();
-      const mig = this.db!.prepare('DELETE FROM migration_history').run();
+    if (!this.driver) return { ddl: 0, comparison: 0, snapshot: 0, migration: 0 };
+    return this.driver.transaction(async (driver) => {
+      const ddl = await driver.execute('DELETE FROM ddl_exports');
+      const comp = await driver.execute('DELETE FROM comparisons');
+      const snap = await driver.execute('DELETE FROM ddl_snapshots');
+      const mig = await driver.execute('DELETE FROM migration_history');
       return {
         ddl: ddl.changes,
         comparison: comp.changes,
@@ -432,16 +342,19 @@ export class StorageService {
         migration: mig.changes,
       };
     });
-    return transaction();
   }
 
   async getStats() {
-    if (!this.db) return {};
+    if (!this.driver) return {};
+    const ddlRow = await this.driver.queryOne('SELECT COUNT(*) as count FROM ddl_exports');
+    const compRow = await this.driver.queryOne('SELECT COUNT(*) as count FROM comparisons');
+    const snapRow = await this.driver.queryOne('SELECT COUNT(*) as count FROM ddl_snapshots');
+    
     return {
-      ddlExports: (this.db.prepare('SELECT COUNT(*) as count FROM ddl_exports').get() as any).count,
-      comparisons: (this.db.prepare('SELECT COUNT(*) as count FROM comparisons').get() as any).count,
-      snapshots: (this.db.prepare('SELECT COUNT(*) as count FROM ddl_snapshots').get() as any).count,
-      dbPath: this.dbPath,
+      ddlExports: (ddlRow as any).count,
+      comparisons: (compRow as any).count,
+      snapshots: (snapRow as any).count,
+      dbPath: this.driver.getDbPath(),
     };
   }
 
@@ -449,19 +362,17 @@ export class StorageService {
    * Search across all stored DDLs in a specific environment/database
    */
   async searchDDL(environment: string, database: string, query: string, flags: { caseSensitive: boolean; wholeWord: boolean; regex: boolean }) {
-    if (!this.db) return [];
+    if (!this.driver) return [];
 
-    // SQLite LIKE is case-insensitive by default for ASCII. 
-    // For more complex regex/wholeword, we'll fetch then filter in JS to keep core simple but powerful.
-    const stmt = this.db.prepare(`
+    const sql = `
       SELECT ddl_type as type, ddl_name as name, ddl_content as content, updated_at
       FROM ddl_exports
       WHERE environment = ? AND database_name = ?
       AND (ddl_name LIKE ? OR ddl_content LIKE ?)
-    `);
+    `;
 
     const likeQuery = `%${query}%`;
-    const rows = stmt.all(environment, database, likeQuery, likeQuery) as any[];
+    const rows = await this.driver.queryAll(sql, [environment, database, likeQuery, likeQuery]) as any[];
 
     // If flags require specific matching (regex, case sensitive), we filter here
     if (flags.regex || flags.caseSensitive || flags.wholeWord) {
@@ -492,4 +403,193 @@ export class StorageService {
 
     return rows;
   }
+
+  // --- Project Operations (TheAndb Core Domain) ---
+
+  async saveProject(project: any) {
+    if (!this.driver) return;
+    const sql = `
+      INSERT INTO projects (id, name, description, is_favorite, order_index, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        description = excluded.description,
+        is_favorite = excluded.is_favorite,
+        order_index = excluded.order_index,
+        updated_at = CURRENT_TIMESTAMP
+    `;
+    await this.driver.execute(sql, [
+      project.id, project.name, project.description, project.is_favorite ? 1 : 0, project.order_index || 0
+    ]);
+    await this._backupProjectsToJson();
+  }
+
+  async getProjects() {
+    if (!this.driver) return [];
+    return this.driver.queryAll('SELECT * FROM projects ORDER BY order_index ASC, created_at DESC');
+  }
+
+  async deleteProject(id: string) {
+    if (!this.driver) return;
+    await this.driver.execute('DELETE FROM projects WHERE id = ?', [id]);
+    await this._backupProjectsToJson();
+  }
+
+  async saveProjectEnvironment(env: any) {
+    if (!this.driver) return;
+    const sql = `
+      INSERT INTO project_environments (
+        id, project_id, env_name, source_type, path, host, port, username, database_name,
+        use_ssh_tunnel, ssh_host, ssh_port, ssh_username, ssh_key_path, use_ssl, is_read_only, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        env_name = excluded.env_name,
+        source_type = excluded.source_type,
+        path = excluded.path,
+        host = excluded.host,
+        port = excluded.port,
+        username = excluded.username,
+        database_name = excluded.database_name,
+        use_ssh_tunnel = excluded.use_ssh_tunnel,
+        ssh_host = excluded.ssh_host,
+        ssh_port = excluded.ssh_port,
+        ssh_username = excluded.ssh_username,
+        ssh_key_path = excluded.ssh_key_path,
+        use_ssl = excluded.use_ssl,
+        is_read_only = excluded.is_read_only,
+        updated_at = CURRENT_TIMESTAMP
+    `;
+    await this.driver.execute(sql, [
+      env.id, env.project_id, env.env_name, env.source_type, env.path, env.host, env.port, env.username, env.database_name,
+      env.use_ssh_tunnel ? 1 : 0, env.ssh_host, env.ssh_port, env.ssh_username, env.ssh_key_path, env.use_ssl ? 1 : 0, env.is_read_only ? 1 : 0
+    ]);
+    await this._backupProjectsToJson();
+  }
+
+  async getProjectEnvironments(projectId: string) {
+    if (!this.driver) return [];
+    return this.driver.queryAll('SELECT * FROM project_environments WHERE project_id = ? ORDER BY created_at ASC', [projectId]);
+  }
+
+  async deleteProjectEnvironment(id: string) {
+    if (!this.driver) return;
+    await this.driver.execute('DELETE FROM project_environments WHERE id = ?', [id]);
+    await this._backupProjectsToJson();
+  }
+
+  // --- Settings Operations ---
+
+  async saveProjectSetting(projectId: string, key: string, value: string) {
+    if (!this.driver) return;
+    const sql = `
+      INSERT INTO project_settings (project_id, setting_key, setting_value, updated_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(project_id, setting_key) DO UPDATE SET
+        setting_value = excluded.setting_value,
+        updated_at = CURRENT_TIMESTAMP
+    `;
+    await this.driver.execute(sql, [projectId, key, value]);
+    await this._backupProjectsToJson();
+  }
+
+  async getProjectSettings(projectId: string) {
+    if (!this.driver) return {};
+    const rows = await this.driver.queryAll('SELECT setting_key, setting_value FROM project_settings WHERE project_id = ?', [projectId]);
+    const settings: any = {};
+    (rows as any[]).forEach((r) => settings[r.setting_key] = r.setting_value);
+    return settings;
+  }
+
+  async saveUserSetting(key: string, value: string) {
+    if (!this.driver) return;
+    const sql = `
+      INSERT INTO user_settings (key, value, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = CURRENT_TIMESTAMP
+    `;
+    await this.driver.execute(sql, [key, value]);
+  }
+
+  async getUserSettings() {
+    if (!this.driver) return {};
+    const rows = await this.driver.queryAll('SELECT * FROM user_settings');
+    const settings: any = {};
+    (rows as any[]).forEach((r) => settings[r.key] = r.value);
+    return settings;
+  }
+
+  // --- Resilience Migration Tool (BaseOne Standard) ---
+
+  private async _backupProjectsToJson() {
+    if (!this.driver) return;
+    try {
+      const projects = await this.getProjects();
+      for (const p of projects as any[]) {
+        p.environments = await this.getProjectEnvironments(p.id);
+        p.settings = await this.getProjectSettings(p.id);
+      }
+      
+      const backupDir = path.join(os.homedir(), '.andb', 'backups');
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+      
+      const backupPath = path.join(backupDir, 'projects_backup.json');
+      fs.writeFileSync(backupPath, JSON.stringify(projects, null, 2), 'utf-8');
+    } catch (e: any) {
+      this.logger.error(`Failed to backup projects: ${e.message}`);
+    }
+  }
+
+  public async restoreFromBackup() {
+    if (!this.driver) return;
+    try {
+      const backupPath = path.join(os.homedir(), '.andb', 'backups', 'projects_backup.json');
+      if (!fs.existsSync(backupPath)) return;
+      
+      const content = fs.readFileSync(backupPath, 'utf-8');
+      const projects = JSON.parse(content);
+      
+      await this.driver.transaction(async (drv) => {
+        for (const p of projects) {
+          await drv.execute(`
+            INSERT OR IGNORE INTO projects (id, name, description, is_favorite, order_index)
+            VALUES (?, ?, ?, ?, ?)
+          `, [p.id, p.name, p.description, p.is_favorite, p.order_index]);
+          
+          if (p.environments) {
+            for (const env of p.environments) {
+              await drv.execute(`
+                INSERT OR IGNORE INTO project_environments (
+                  id, project_id, env_name, source_type, path, host, port, username, database_name,
+                  use_ssh_tunnel, ssh_host, ssh_port, ssh_username, ssh_key_path, use_ssl, is_read_only
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `, [
+                env.id, env.project_id, env.env_name, env.source_type, env.path,
+                env.host, env.port, env.username, env.database_name,
+                env.use_ssh_tunnel, env.ssh_host, env.ssh_port, env.ssh_username,
+                env.ssh_key_path, env.use_ssl, env.is_read_only
+              ]);
+            }
+          }
+          
+          if (p.settings) {
+            for (const key of Object.keys(p.settings)) {
+              await drv.execute(`
+                INSERT OR IGNORE INTO project_settings (project_id, setting_key, setting_value)
+                VALUES (?, ?, ?)
+              `, [p.id, key, p.settings[key]]);
+            }
+          }
+        }
+      });
+      this.logger.info('BaseOne data resilience: Successfully restored projects from JSON backup');
+    } catch (e: any) {
+      this.logger.error(`Failed to restore projects from backup: ${e.message}`);
+    }
+  }
+
 }

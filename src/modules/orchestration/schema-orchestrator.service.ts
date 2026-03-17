@@ -148,6 +148,16 @@ export class SchemaOrchestrator {
     }
   }
 
+  async compareArbitraryDDL(payload: any) {
+    const { srcDDL, destDDL, type } = payload;
+    return await this.comparator.compareArbitraryDDL(srcDDL, destDDL, type);
+  }
+
+  async compareCustomSelection(payload: any) {
+    const { src, dest } = payload;
+    return await this.comparator.compareCustomSelection(src, dest);
+  }
+
   async migrateSchema(payload: any) {
     const { srcEnv, destEnv, objects, gitConfig, dryRun = false } = payload;
     const destConn = this.configService.getConnection(destEnv);

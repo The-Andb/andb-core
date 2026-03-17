@@ -35,7 +35,7 @@ async function runRealWorldTest() {
   console.log(`✅ Loaded f2.sql: ${driver2.data.TABLES.size} tables`);
 
   // 2. Initialize Services
-  const comparator = new ComparatorService(parser);
+  const comparator = new ComparatorService(parser, {} as any, {} as any);
   const migrator = new MigratorService();
   const defaultMigrator = new MysqlMigrator();
 

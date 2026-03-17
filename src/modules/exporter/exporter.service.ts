@@ -191,4 +191,58 @@ export class ExporterService {
         return '';
     }
   }
+
+  async exportTableData(
+    envName: string,
+    tableName: string,
+    format: 'csv' | 'json',
+    outputPath?: string
+  ) {
+    this.logger.info(`📊 [Exporter] exportTableData: table=${tableName}, format=${format}, env=${envName}`);
+
+    const connection = this.configService.getConnection(envName);
+    if (!connection) throw new Error(`Connection not found for env: ${envName}`);
+
+    const driver = await this.driverFactory.create(connection.type, connection.config);
+    try {
+      await driver.connect();
+      const data = await driver.query(`SELECT * FROM ${tableName} LIMIT 10000`); // Safety limit for now
+
+      let content = '';
+      if (format === 'json') {
+        content = JSON.stringify(data, null, 2);
+      } else {
+        content = this._convertToCSV(data);
+      }
+
+      const finalPath = outputPath || path.join(process.cwd(), 'exports', `${tableName}.${format}`);
+      this._ensureDir(path.dirname(finalPath));
+      fs.writeFileSync(finalPath, content);
+
+      this.logger.info(`✅ [Exporter] Exported ${data.length} rows to ${finalPath}`);
+      return { path: finalPath, count: data.length };
+    } finally {
+      await driver.disconnect();
+    }
+  }
+
+  private _convertToCSV(data: any[]): string {
+    if (!data || data.length === 0) return '';
+    const headers = Object.keys(data[0]);
+    const rows = data.map(row => {
+      return headers.map(header => {
+        let val = row[header];
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'string') {
+          // Escape quotes and wrap in quotes
+          return `"${val.replace(/"/g, '""')}"`;
+        }
+        if (val instanceof Date) {
+          return val.toISOString();
+        }
+        return val;
+      }).join(',');
+    });
+    return [headers.join(','), ...rows].join('\n');
+  }
 }

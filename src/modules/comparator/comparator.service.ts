@@ -28,9 +28,15 @@ export class ComparatorService {
     const srcTable = this.parser.parseTable(srcDDL);
     const destTable = this.parser.parseTable(destDDL);
 
-    // Fallback if parsing fails (should not happen if DDL is valid)
+    // Fallback if parsing fails: do literal comparison
     if (!srcTable || !destTable) {
-      return { tableName: 'unknown', operations: [], hasChanges: false };
+      const isDiff = this.parser.normalize(srcDDL, { ignoreDefiner: true, ignoreWhitespace: true }) !== 
+                     this.parser.normalize(destDDL, { ignoreDefiner: true, ignoreWhitespace: true });
+      return { 
+        tableName: 'unknown', 
+        operations: isDiff ? [{ type: 'MODIFY', target: 'TABLE', name: 'structure' }] : [], 
+        hasChanges: isDiff 
+      };
     }
 
     const tableName = srcTable.tableName;
@@ -793,12 +799,73 @@ export class ComparatorService {
     if (normSrc === normDest) return false;
 
     // For tables, we can do a deeper check via compareTables if needed
-    if (type === 'TABLES') {
+    if (type === 'TABLES' || type === 'TABLE') {
       const diff = this.compareTables(src, dest);
       return diff.hasChanges;
     }
 
     return true;
+  }
+
+  /**
+   * Compare two arbitrary DDL strings
+   */
+  async compareArbitraryDDL(srcDDL: string, destDDL: string, type?: string): Promise<any> {
+    const detectedType = type || this.parser.detectObjectType(srcDDL);
+    const storageType = (detectedType === 'TABLE' ? 'TABLES' : 
+                         (detectedType === 'UNKNOWN' ? 'SQL' : detectedType + 'S')) as any;
+
+    if (detectedType === 'TABLE') {
+      const tableDiff = this.compareTables(srcDDL, destDDL);
+      // Handle arbitrary table generation properly
+      const alterStatements = tableDiff.hasChanges ? this.migrator.generateTableAlterSQL(tableDiff) : [];
+      if (!tableDiff.hasChanges && srcDDL.trim() !== destDDL.trim()) {
+        alterStatements.push(srcDDL);
+      } else if (tableDiff.hasChanges && alterStatements.length === 0) {
+        alterStatements.push(srcDDL);
+      }
+      
+      return {
+        name: tableDiff.tableName || 'arbitrary',
+        status: tableDiff.hasChanges ? 'different' : (srcDDL.trim() !== destDDL.trim() ? 'different' : 'equal'),
+        type: 'TABLES',
+        alterStatements,
+        diff: { source: srcDDL, target: destDDL }
+      };
+    }
+
+    const diff = (detectedType === 'TRIGGER')
+      ? this.compareTriggers('arbitrary', srcDDL, destDDL)
+      : this.compareGenericDDL(detectedType as any, 'arbitrary', srcDDL, destDDL);
+
+    const isDifferent = diff !== null || (srcDDL.trim() !== destDDL.trim() && detectedType === 'UNKNOWN');
+
+    const result = {
+      name: diff ? diff.name : 'arbitrary',
+      status: isDifferent ? 'different' : (srcDDL && destDDL ? 'equal' : (!srcDDL && !destDDL ? 'missing' : (srcDDL ? 'missing_in_target' : 'missing_in_source'))),
+      type: storageType,
+      ddl: diff ? this.migrator.generateObjectSQL(diff) : (isDifferent ? [srcDDL] : []),
+      alterStatements: diff ? this.migrator.generateObjectSQL(diff) : (isDifferent ? [srcDDL] : []),
+      diff: { source: srcDDL || null, target: destDDL || null }
+    };
+    return result;
+  }
+
+  /**
+   * Compare two specific objects from storage, possibly with different names/envs
+   */
+  async compareCustomSelection(
+    src: { env: string; db: string; type: string; name: string },
+    dest: { env: string; db: string; type: string; name: string }
+  ): Promise<any> {
+    const srcDDL = await this.storageService.getDDL(src.env, src.db, src.type, src.name);
+    const destDDL = await this.storageService.getDDL(dest.env, dest.db, dest.type, dest.name);
+
+    const result = await this.compareArbitraryDDL(srcDDL, destDDL, src.type.replace(/S$/, ''));
+    
+    // Override name to be more descriptive for custom selection
+    result.name = `${src.name} vs ${dest.name}`;
+    return result;
   }
 
   /**

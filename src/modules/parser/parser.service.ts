@@ -633,4 +633,23 @@ export class ParserService {
       return null;
     }
   }
+
+  /**
+   * Detect object type from DDL string
+   */
+  detectObjectType(ddl: string): string {
+    if (!ddl) return 'UNKNOWN';
+    const clean = ddl.replace(/\/\*.*?\*\//gs, '').trim(); // Remove comments
+    const up = clean.toUpperCase();
+
+    if (up.includes('CREATE TABLE')) return 'TABLE';
+    if (up.includes('CREATE VIEW')) return 'VIEW';
+    if (up.includes('CREATE PROCEDURE')) return 'PROCEDURE';
+    if (up.includes('CREATE FUNCTION')) return 'FUNCTION';
+    if (up.includes('CREATE TRIGGER')) return 'TRIGGER';
+    if (up.includes('CREATE EVENT')) return 'EVENT';
+    if (up.includes('CREATE INDEX') || up.includes('CREATE UNIQUE INDEX')) return 'INDEX';
+
+    return 'UNKNOWN';
+  }
 }

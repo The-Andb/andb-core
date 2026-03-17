@@ -6,7 +6,7 @@ import { MysqlMigrator } from '../src/modules/migrator/mysql/mysql.migrator';
 console.log('🧪 Starting Object Comparator Tests: Views & Triggers');
 
 const parser = new ParserService();
-const comparator = new ComparatorService(parser);
+const comparator = new ComparatorService(parser, {} as any, {} as any);
 const migrator = new MysqlMigrator();
 
 // --- Test Case 1: Identical Views ---

@@ -33,7 +33,7 @@ async function runE2E() {
   // 1. Initialize Services
   const driver = new MysqlDriver(config);
   const parser = new ParserService();
-  const comparator = new ComparatorService(parser);
+  const comparator = new ComparatorService(parser, {} as any, {} as any);
   const migrator = new MigratorService();
   const defaultMigrator = new MysqlMigrator();
 

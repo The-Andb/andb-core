@@ -7,7 +7,7 @@ import { MysqlMigrator } from '../src/modules/migrator/mysql/mysql.migrator';
 console.log('🧪 Starting Mirror Test: Migrator Service');
 
 const parser = new ParserService();
-const comparator = new ComparatorService(parser);
+const comparator = new ComparatorService(parser, {} as any, {} as any);
 const migrator = new MigratorService();
 const defaultMigrator = new MysqlMigrator();
 
