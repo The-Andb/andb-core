@@ -1,14 +1,17 @@
+import * as path from 'path';
+import * as fs from 'fs';
 import { Container } from './container';
 import { ParserService } from './modules/parser/parser.service';
 
 export class CoreBridge {
   private static container: Container | null = null;
   private static initPromise: Promise<any> | null = null;
+  private static resolvedDbPath: string = '';
 
   /**
    * Initialize the Core Engine (Singleton with Lock)
    */
-  public static async init(userDataPath?: string, customDbPath?: string) {
+  public static async init(userDataPath: string, customDbPath?: string) {
     if (this.container) return this.container;
 
     if (this.initPromise) {
@@ -16,12 +19,24 @@ export class CoreBridge {
     }
 
     this.initPromise = (async () => {
-      console.log('🚀 [CoreBridge] Initializing Engine...');
-      const path = require('path');
-      
       let dbPath = customDbPath;
       if (!dbPath && userDataPath) {
         dbPath = path.join(userDataPath, 'andb-storage.db');
+      }
+
+      if (!dbPath) {
+        throw new Error('CoreBridge.init(): dbPath could not be resolved. Either userDataPath or customDbPath must be provided.');
+      }
+
+      this.resolvedDbPath = dbPath;
+
+      if (userDataPath && fs.existsSync(userDataPath)) {
+        try {
+          process.chdir(userDataPath);
+          console.log(`📂 [CoreBridge] CWD changed to: ${userDataPath}`);
+        } catch (e) {
+          console.warn(`⚠️ [CoreBridge] Failed to change CWD to ${userDataPath}:`, e);
+        }
       }
 
       this.container = await Container.create(dbPath);
@@ -30,6 +45,14 @@ export class CoreBridge {
     })();
 
     return this.initPromise;
+  }
+
+  public static getDbPath() {
+    return this.resolvedDbPath;
+  }
+
+  public static getStoragePath() {
+    return this.resolvedDbPath;
   }
 
   /**
@@ -47,12 +70,35 @@ export class CoreBridge {
   public static getConfig() {
     return this.container?.config;
   }
+  public static getLastMigrationReport() {
+    return this.container?.lastMigrationReport ?? null;
+  }
 
   /**
    * Execute an operation via Orchestrator
    */
   public static async execute(operation: string, payload: any) {
-    if (!this.container) await this.init();
+    if (!this.container) {
+      throw new Error('CoreBridge.execute(): Core Engine is not initialized. Call CoreBridge.init() first.');
+    }
+
+    // Auto-register connections if provided in payload (important for Desktop/RPC)
+    const config = this.getConfig();
+    if (config) {
+      if (payload.connection && payload.env) {
+        console.log(`[CoreBridge] Registering connection for env: ${payload.env}`);
+        config.setConnection(payload.env, payload.connection, payload.connection.type || 'mysql');
+      }
+      if (payload.sourceConnection && payload.srcEnv) {
+        console.log(`[CoreBridge] Registering source connection for env: ${payload.srcEnv}`);
+        config.setConnection(payload.srcEnv, payload.sourceConnection, payload.sourceConnection.type || 'mysql');
+      }
+      if (payload.targetConnection && payload.destEnv) {
+        console.log(`[CoreBridge] Registering target connection for env: ${payload.destEnv}`);
+        config.setConnection(payload.destEnv, payload.targetConnection, payload.targetConnection.type || 'mysql');
+      }
+    }
+
     return await this.container!.orchestrator.execute(operation, payload);
   }
 

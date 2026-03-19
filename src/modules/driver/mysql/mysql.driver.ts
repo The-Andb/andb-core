@@ -153,10 +153,10 @@ export class MysqlDriver implements IDatabaseDriver {
     const db = database || 'default';
 
     // Safety check for quotes to prevent basic injection in generated script review
-    const safeUser = username.replace(/'/g, '');
+    const safeUser = (username || '').replace(/'/g, '');
     const safePass = (password || '').replace(/'/g, '');
-    const safeHost = host.replace(/'/g, '');
-    const safeDb = db.replace(/`/g, '');
+    const safeHost = (host || '%').replace(/'/g, '');
+    const safeDb = (db || 'default').replace(/`/g, '');
 
     let sql = '';
     if (!isReconfigure) {

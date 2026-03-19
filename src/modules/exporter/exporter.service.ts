@@ -30,6 +30,7 @@ export class ExporterService {
       throw new Error(`Connection not found for env: ${envName}`);
     }
     console.log(`✅ [Exporter] Connection found: type=${connection.type}, host=${connection.config?.host}, db=${connection.config?.database}`);
+    console.log(`[Exporter] Full connection config: ${JSON.stringify(connection.config)}`);
 
     const driver = await this.driverFactory.create(connection.type, connection.config);
     try {

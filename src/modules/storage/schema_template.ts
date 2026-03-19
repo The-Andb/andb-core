@@ -1,3 +1,4 @@
+export const schemaTemplateSql = `
 -- schema_template.sql
 -- TheAndb Internal Database Golden Template (Target Schema V2)
 -- Used by the Dogfooding Auto-migration Engine.
@@ -118,3 +119,4 @@ CREATE TABLE user_settings (
 CREATE INDEX idx_ddl_lookup ON ddl_exports(environment, database_name);
 CREATE INDEX idx_comp_lookup ON comparisons(src_environment, dest_environment);
 CREATE INDEX idx_snapshot_lookup ON ddl_snapshots(environment, database_name, ddl_type, ddl_name);
+`;

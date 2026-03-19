@@ -12,7 +12,9 @@ import { ConnectionType } from './common/interfaces/connection.interface';
 import { StorageService } from './modules/storage/storage.service';
 import { SqliteStorageDriver } from './modules/storage/drivers/sqlite-storage.driver';
 import { ProjectConfigService } from './modules/config/project-config.service';
+import { YamlImporterService } from './modules/config/yaml-importer.service';
 import { ParserService } from './modules/parser/parser.service';
+import { schemaTemplateSql } from './modules/storage/schema_template';
 import { DriverFactoryService } from './modules/driver/driver-factory.service';
 import { ComparatorService } from './modules/comparator/comparator.service';
 import { SemanticDiffService } from './modules/comparator/semantic-diff.service';
@@ -29,11 +31,30 @@ import { featureConfig } from './modules/config/feature.config';
 import { DependencySearchService } from './modules/search/dependency-search.service';
 
 /**
+ * Structured report from the dogfooding migration.
+ */
+export interface MigrationChange {
+  action: 'CREATED' | 'MODIFIED';
+  table: string;
+  details: string[];
+}
+
+export interface MigrationReport {
+  fromVersion?: string;
+  toVersion: string;
+  changes: MigrationChange[];
+  timestamp: string;
+}
+
+/**
  * Lightweight DI Container — replaces Framework AppModule + NestFactory.
  * All wiring is explicit. No decorators, no reflection, no magic.
  */
 export class Container {
   private static instance: Container | null = null;
+
+  // Migration report from last boot (null = no changes)
+  public lastMigrationReport: MigrationReport | null = null;
 
   // Core services
   public readonly storage: StorageService;
@@ -93,37 +114,41 @@ export class Container {
       this.securityOrchestrator,
       this.gitOrchestrator,
       this.schemaOrchestrator,
+      this.parser,
     );
   }
 
   /**
    * Async initialization of services (like storage)
    */
-  public async init(dbPath?: string) {
-    const defaultGlobalPath = path.join(os.homedir(), '.andb', 'data', 'andb_core.sqlite');
-    const finalDbPath = dbPath || defaultGlobalPath;
+  public async init(dbPath: string) {
+    if (!dbPath) {
+      throw new Error('Container.init(): dbPath is required. No fallback allowed for Single Source of Truth.');
+    }
+    const finalDbPath = dbPath;
     // Default to SQLite driver for now. 
     // In the future, this can be passed from the outside (e.g. CLI vs Desktop)
     const driver = new SqliteStorageDriver();
     await this.storage.initialize(driver, finalDbPath);
 
     try {
-      await this.runDogfoodMigration(finalDbPath);
+      this.lastMigrationReport = await this.runDogfoodMigration(finalDbPath);
     } catch (e: any) {
       console.error(`[Dogfooding] Internal Migration Failed: ${e.message}`);
     }
+
+    // Migrate any legacy YAML formats directly into the Dogfooding Database
+    const importer = new YamlImporterService(this.storage);
+    await importer.runImportIfNecessary();
+
+    // Rehydrate synchronous accessors for CLI configurations
+    await this.config.init(this.storage);
   }
 
-  private async runDogfoodMigration(targetDbPath: string) {
-    // 1. Create In-Memory DB populated with schema_template.sql
-    const templatePath = path.join(__dirname, 'modules', 'storage', 'schema_template.sql');
-    if (!fs.existsSync(templatePath)) {
-       console.log('[Dogfooding] Template schema not found, skipping self-migration.');
-       return;
-    }
-    const templateSql = fs.readFileSync(templatePath, 'utf8');
+  private async runDogfoodMigration(targetDbPath: string): Promise<MigrationReport | null> {
+    // 1. Create In-Memory DB populated with schema_template.ts
     const memDb = new Database(':memory:');
-    memDb.exec(templateSql);
+    memDb.exec(schemaTemplateSql);
 
     // 2. Wrap them in SqliteDbDrivers to use Introspection Services
     const srcDriver = new SqliteDbDriver({ host: ':memory:' });
@@ -140,7 +165,7 @@ export class Container {
     const expectedTables = await srcIntro.listTables('default');
     const actualTables = await destIntro.listTables('default');
 
-    let migratedSomething = false;
+    const changes: MigrationChange[] = [];
 
     // 3. Diff Expected vs Actual
     for (const table of expectedTables) {
@@ -149,39 +174,95 @@ export class Container {
          // Missing entirely -> Execute CREATE statement verbatim
          console.log(`[Dogfooding] Creating missing table: ${table}`);
          await destDriver.query(srcDdl);
-         migratedSomething = true;
+
+         // Extract column names for the report
+         const colNames = this.extractColumnNames(srcDdl);
+         changes.push({
+           action: 'CREATED',
+           table,
+           details: colNames.length > 0
+             ? [`New table with ${colNames.length} columns: ${colNames.join(', ')}`]
+             : ['New table created']
+         });
        } else {
          // Existing table -> AST Diff via ComparatorService
          const destDdl = await destIntro.getTableDDL('default', table);
-         // compareTables returns pure AST IDiffOperations
          const diff = this.comparator.compareTables(srcDdl, destDdl);
          if (diff.hasChanges) {
            console.log(`[Dogfooding] Migrating table: ${table}`);
            const stmts = migrator.generateTableAlterSQL(diff);
+           const details: string[] = [];
            for (const sql of stmts) {
              if (sql.startsWith('-- WARNING')) {
                console.warn(`[Dogfooding] ${sql}`);
+               details.push(sql.replace('-- WARNING: ', '⚠️ '));
              } else {
                await destDriver.query(sql);
-               migratedSomething = true;
+               details.push(this.humanizeAlterSQL(sql));
              }
            }
+           changes.push({ action: 'MODIFIED', table, details });
          }
        }
     }
 
-    if (migratedSomething) {
-       console.log('[Dogfooding] Core database successfully migrated up to Golden Template.');
+    if (changes.length > 0) {
+       console.log(`[Dogfooding] Core database migrated: ${changes.length} table(s) affected.`);
     }
 
     await destDriver.disconnect();
-    // memDb will close upon garbage collection since it's :memory:
+
+    if (changes.length === 0) return null;
+
+    return {
+      toVersion: 'latest',
+      changes,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Extract column names from a CREATE TABLE DDL for reporting.
+   */
+  private extractColumnNames(ddl: string): string[] {
+    const match = ddl.match(/\(([\s\S]+)\)/);
+    if (!match) return [];
+    const body = match[1];
+    const columns: string[] = [];
+    for (const line of body.split(',')) {
+      const trimmed = line.trim();
+      // Skip constraints (PRIMARY KEY, UNIQUE, FOREIGN KEY, CHECK)
+      if (/^(PRIMARY|UNIQUE|FOREIGN|CHECK|CONSTRAINT)/i.test(trimmed)) continue;
+      const colMatch = trimmed.match(/^[`"']?(\w+)[`"']?/); 
+      if (colMatch) columns.push(colMatch[1]);
+    }
+    return columns;
+  }
+
+  /**
+   * Convert ALTER TABLE SQL to a human-readable string for the changelog.
+   */
+  private humanizeAlterSQL(sql: string): string {
+    const addCol = sql.match(/ALTER TABLE\s+[`"']?(\w+)[`"']?\s+ADD\s+(?:COLUMN\s+)?[`"']?(\w+)[`"']?/i);
+    if (addCol) return `Added column \`${addCol[2]}\``;
+
+    const dropCol = sql.match(/ALTER TABLE\s+[`"']?(\w+)[`"']?\s+DROP\s+(?:COLUMN\s+)?[`"']?(\w+)[`"']?/i);
+    if (dropCol) return `Removed column \`${dropCol[2]}\``;
+
+    const modCol = sql.match(/ALTER TABLE\s+[`"']?(\w+)[`"']?\s+(?:MODIFY|ALTER)\s+(?:COLUMN\s+)?[`"']?(\w+)[`"']?/i);
+    if (modCol) return `Modified column \`${modCol[2]}\``;
+
+    const rename = sql.match(/ALTER TABLE\s+[`"']?(\w+)[`"']?\s+RENAME/i);
+    if (rename) return `Renamed table structure`;
+
+    // Fallback: show truncated SQL
+    return sql.length > 80 ? sql.substring(0, 77) + '...' : sql;
   }
 
   /**
    * Create or retrieve singleton container
    */
-  static async create(dbPath?: string): Promise<Container> {
+  static async create(dbPath: string): Promise<Container> {
     if (this.instance) return this.instance;
     const container = new Container();
     await container.init(dbPath);

@@ -2,6 +2,7 @@ const { getLogger } = require('andb-logger');
 import { ProjectConfigService } from '../config/project-config.service';
 import { GitOrchestrator } from './git-orchestrator.service';
 import { ISafetyReport, SafetyLevel } from '../../common/interfaces/schema.interface';
+import { ConnectionUtil } from '../../common/utils/connection.util';
 
 export class SchemaOrchestrator {
   private readonly logger = getLogger({ logName: 'SchemaOrchestrator' });
@@ -347,16 +348,8 @@ export class SchemaOrchestrator {
   }
 
   public async getDriverFromConnection(connection: any) {
-    const config = {
-      host: connection.host,
-      port: connection.port,
-      database: connection.database || connection.name,
-      user: connection.username,
-      password: connection.password || '',
-    };
-    const connType =
-      (connection as any).type === 'dump' || connection.host === 'file' ? 'dump' : 'mysql';
-    return await this.driverFactory.create(connType, config);
+    const { type, config } = ConnectionUtil.resolve(connection);
+    return await this.driverFactory.create(type, config);
   }
 
   async getSchemaNormalized(payload: any) {
@@ -399,5 +392,35 @@ export class SchemaOrchestrator {
       query,
       flags
     );
+  }
+
+  async createSnapshot(payload: any) {
+    const { env, db, type, name } = payload;
+    const conn = this.configService.getConnection(env || payload.sourceConfig?.env);
+    
+    if (!conn) throw new Error('Source connection required for snapshot');
+    const driver = await this.driverFactory.create(conn.type, conn.config);
+    try {
+      await driver.connect();
+      const intro = driver.getIntrospectionService();
+      
+      const dbName = db || conn.config?.database;
+      const ddl = await intro.getObjectDDL(dbName, type, name);
+      
+      if (ddl) {
+        await this.storageService.saveSnapshot(
+          env || payload.sourceConfig?.env,
+          dbName,
+          type.toLowerCase(),
+          name,
+          ddl,
+          'MANUAL_SNAPSHOT'
+        );
+        return { success: true, message: `Snapshot created for ${type} ${name}` };
+      }
+      throw new Error(`Could not generate DDL for ${type} ${name}`);
+    } finally {
+      await driver.disconnect();
+    }
   }
 }

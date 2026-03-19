@@ -4,6 +4,7 @@ import { FeatureConfigStore } from '../config/feature.config';
 import { SecurityOrchestrator } from './security-orchestrator.service';
 import { GitOrchestrator } from './git-orchestrator.service';
 import { SchemaOrchestrator } from './schema-orchestrator.service';
+import { ParserService } from '../parser/parser.service';
 
 export class OrchestrationService {
   private readonly logger = getLogger({ logName: 'OrchestrationService' });
@@ -14,6 +15,7 @@ export class OrchestrationService {
     public readonly securityOrchestrator: SecurityOrchestrator,
     public readonly gitOrchestrator: GitOrchestrator,
     public readonly schemaOrchestrator: SchemaOrchestrator,
+    public readonly parser: ParserService,
   ) { }
 
   async execute(operation: string, payload: any) {
@@ -23,6 +25,8 @@ export class OrchestrationService {
     this.syncConfigWithPayload(payload);
 
     switch (operation) {
+      case 'parseTable':
+        return this.parser.parseTableDetailed(payload.ddl);
       case 'getSchemaObjects':
         return await this.schemaOrchestrator.getSchemaObjects(payload);
       case 'export':
@@ -40,6 +44,8 @@ export class OrchestrationService {
         return await this.schemaOrchestrator.getSchemaNormalized(payload);
       case 'migrate':
         return await this.schemaOrchestrator.migrateSchema(payload);
+      case 'create-snapshot':
+        return await this.schemaOrchestrator.createSnapshot(payload);
       case 'search':
         return await this.schemaOrchestrator.searchDependencies(payload);
       case 'compare-arbitrary':

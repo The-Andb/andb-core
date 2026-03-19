@@ -1,6 +1,7 @@
 const { getLogger } = require('andb-logger');
 import * as fs from 'fs';
 import { ProjectConfigService } from '../config/project-config.service';
+import { ConnectionUtil } from '../../common/utils/connection.util';
 
 export class SecurityOrchestrator {
   private readonly logger = getLogger({ logName: 'SecurityOrchestrator' });
@@ -142,7 +143,7 @@ export class SecurityOrchestrator {
     const driver = await this.getDriverFromConnection(connection);
     try {
       await driver.connect();
-      const connType = (connection as any).type === 'dump' || connection.host === 'file' ? 'dump' : 'mysql';
+      const { type: connType } = ConnectionUtil.resolve(connection);
       if (connType !== 'dump') {
         await driver.query('SELECT 1');
       }
@@ -154,40 +155,8 @@ export class SecurityOrchestrator {
     }
   }
 
-  async getDriverFromConnection(connection: any) {
-    let sshConfig: any = undefined;
-    const rawSsh = connection.sshConfig || connection.ssh;
-
-    if (rawSsh && (rawSsh.enabled === undefined || rawSsh.enabled === true)) {
-      sshConfig = {
-        host: rawSsh.host,
-        port: rawSsh.port,
-        username: rawSsh.username,
-        password: rawSsh.password,
-        passphrase: rawSsh.passphrase,
-      };
-
-      if (rawSsh.privateKeyPath && !rawSsh.privateKey) {
-        try {
-          sshConfig.privateKey = fs.readFileSync(rawSsh.privateKeyPath, 'utf8');
-        } catch (e: any) {
-          console.warn(`Failed to read SSH Key: ${e.message}`);
-        }
-      } else if (rawSsh.privateKey) {
-        sshConfig.privateKey = rawSsh.privateKey;
-      }
-    }
-
-    const config = {
-      host: connection.host,
-      port: connection.port,
-      database: connection.database || connection.name,
-      user: connection.username,
-      password: connection.password || '',
-      sshConfig,
-    };
-    const connType =
-      (connection as any).type === 'dump' || connection.host === 'file' ? 'dump' : 'mysql';
-    return await this.driverFactory.create(connType, config);
+  public async getDriverFromConnection(connection: any) {
+    const { type, config } = ConnectionUtil.resolve(connection);
+    return await this.driverFactory.create(type, config);
   }
 }

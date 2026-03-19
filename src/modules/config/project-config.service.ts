@@ -7,63 +7,90 @@ import { IDatabaseConfig, ConnectionType } from '../../common/interfaces/connect
 export class ProjectConfigService {
   private readonly logger = getLogger({ logName: 'ProjectConfigService' });
   private config: any = {};
+  private activeProjectId: string | null = null;
+  private storageService?: any; // Late-bound StorageService
 
   constructor() {
-    this.loadConfig();
+    // Configs are now late-loaded by init()
   }
 
-  private loadConfig() {
-    const configPath = path.join(process.cwd(), 'andb.yaml');
-    if (fs.existsSync(configPath)) {
-      try {
-        const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) || {};
-        this.config = this._interpolate(rawConfig);
-        // Normalize YAML key "environments" to internal getDBDestination
-        if (this.config.environments && !this.config.getDBDestination) {
-          this.config.getDBDestination = this.config.environments;
-        }
-        this.logger.info('Loaded configuration from andb.yaml (with env interpolation)');
-      } catch (e: any) {
-        this.logger.error(`Error parsing andb.yaml: ${e.message}`);
-      }
-    }
-  }
+  /**
+   * Called exactly once during Container boot lifecycle.
+   */
+  public async init(storageService: any) {
+    this.storageService = storageService;
 
-  private _interpolate(obj: any): any {
-    if (typeof obj === 'string') {
-      return obj.replace(/\${([^}]+)}/g, (_, v) => process.env[v] || '');
-    }
-    if (Array.isArray(obj)) {
-      return obj.map((i) => this._interpolate(i));
-    }
-    if (obj !== null && typeof obj === 'object') {
-      const result: any = {};
-      for (const key in obj) {
-        result[key] = this._interpolate(obj[key]);
+    try {
+      // 1. Fetch the default/first project
+      const projects = await this.storageService.getProjects();
+      if (!projects || projects.length === 0) {
+         this.logger.warn(`ProjectConfigService.init(): No projects found in SQLite DB.`);
+         return;
       }
-      return result;
+      
+      const defaultProject = projects[0];
+      this.activeProjectId = defaultProject.id;
+      
+      // 2. Fetch all environments 
+      const envs = await this.storageService.getProjectEnvironments(defaultProject.id);
+      const settings = await this.storageService.getProjectSettings(defaultProject.id);
+
+      // Reconstruct the legacy config structure so existing getters do not break
+      this.config = {
+         projects: projects,
+         environments: {}, // mapped below
+         domainNormalization: {},
+         FEATURE_FLAGS: {} // Fallback generic
+      };
+
+      for (const env of envs) {
+        this.config.environments[env.env_name] = {
+           id: env.id,
+           type: env.source_type,
+           path: env.path,
+           host: env.host,
+           port: env.port,
+           user: env.username,
+           password: '', // We don't save passwords in Config anymore by design
+           database: env.database_name,
+           ssh: env.use_ssh_tunnel ? {
+             host: env.ssh_host,
+             port: env.ssh_port,
+             username: env.ssh_username,
+             privateKey: env.ssh_key_path
+           } : undefined,
+           ssl: env.use_ssl === 1,
+           readonly: env.is_read_only === 1
+        };
+      }
+
+      if (settings['domain_normalization_pattern']) {
+         this.config.domainNormalization = {
+            pattern: settings['domain_normalization_pattern'],
+            replacement: settings['domain_normalization_replacement'] || ''
+         };
+      }
+
+    } catch (e: any) {
+      this.logger.error(`Error loading configuration from SQLite: ${e.message}`);
     }
-    return obj;
   }
 
   getEnvironments(): string[] {
-    const envMap = this.config.getDBDestination || this.config.environments || this.config.ENVIRONMENTS;
+    const envMap = this.config.environments;
     if (envMap && typeof envMap === 'object') {
       return Object.keys(envMap);
     }
-    return ['LOCAL', 'DEV', 'UAT', 'STAGE', 'PROD'];
+    return [];
   }
 
   getDBDestination(env: string): IDatabaseConfig | null {
-    const destinations = this.config.getDBDestination || this.config.environments || this.config.ENVIRONMENTS;
+    const destinations = this.config.environments;
     if (!destinations) {
-      this.logger.warn(`getDBDestination: No destinations found in config. Keys: ${Object.keys(this.config)}`);
+      this.logger.warn(`getDBDestination: No destinations found in config.`);
       return null;
     }
     const config = destinations[env] || null;
-    if (!config) {
-      this.logger.warn(`getDBDestination: Env "${env}" not found in destinations. Available: ${Object.keys(destinations)}`);
-    }
     return config;
   }
 
@@ -109,10 +136,12 @@ export class ProjectConfigService {
   }
 
   setConnection(env: string, config: IDatabaseConfig, type: ConnectionType = ConnectionType.MYSQL) {
-    if (!this.config.getDBDestination) {
-      this.config.getDBDestination = {};
+    if (!this.config.environments) {
+      this.config.environments = {};
     }
-    this.config.getDBDestination[env] = { ...config, type };
+    this.config.environments[env] = { ...config, type };
+    // We do NOT physically save here because the desktop UI directly calls StorageService now.
+    // This is just a memory fallback if CLI manipulates something live.
   }
 
   setDomainNormalization(pattern: RegExp, replacement: string) {
@@ -144,14 +173,6 @@ export class ProjectConfigService {
   }
 
   saveConfig() {
-    const configPath = path.join(process.cwd(), 'andb.yaml');
-    try {
-      const yamlStr = yaml.dump(this.config);
-      fs.writeFileSync(configPath, yamlStr, 'utf8');
-      this.logger.info('Saved configuration to andb.yaml');
-    } catch (e: any) {
-      this.logger.error(`Error saving andb.yaml: ${e.message}`);
-      throw e;
-    }
+    this.logger.warn('saveConfig() called dynamically. andb.yaml is no longer supported directly.');
   }
 }

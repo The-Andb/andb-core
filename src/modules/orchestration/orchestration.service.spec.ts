@@ -9,6 +9,7 @@ describe('OrchestrationService', () => {
   let securityOrchestrator: any;
   let gitOrchestrator: any;
   let schemaOrchestrator: any;
+  let parser: any;
 
   beforeEach(() => {
     configService = {
@@ -39,7 +40,12 @@ describe('OrchestrationService', () => {
       exportSchema: jest.fn(),
       compareSchema: jest.fn(),
       migrateSchema: jest.fn(),
+      createSnapshot: jest.fn(),
     } as unknown as SchemaOrchestrator;
+
+    parser = {
+      parseTableDetailed: jest.fn(),
+    };
 
     const mockFeatures = {
       mcpServer: true,
@@ -51,6 +57,7 @@ describe('OrchestrationService', () => {
       securityOrchestrator,
       gitOrchestrator,
       schemaOrchestrator,
+      parser,
     );
   });
 
@@ -89,6 +96,18 @@ describe('OrchestrationService', () => {
       const payload = { env: 'DEV' };
       await service.execute('git-status', payload);
       expect(gitOrchestrator.gitStatus).toHaveBeenCalledWith(payload);
+    });
+
+    it('should delegate "create-snapshot" to schemaOrchestrator', async () => {
+      const payload = { env: 'DEV' };
+      await service.execute('create-snapshot', payload);
+      expect(schemaOrchestrator.createSnapshot).toHaveBeenCalledWith(payload);
+    });
+
+    it('should delegate "parseTable" to parser', async () => {
+      const payload = { ddl: 'CREATE TABLE x (id INT)' };
+      await service.execute('parseTable', payload);
+      expect(parser.parseTableDetailed).toHaveBeenCalledWith(payload.ddl);
     });
 
     it('should throw error for unknown operation', async () => {
