@@ -30,12 +30,12 @@ export class ComparatorService {
 
     // Fallback if parsing fails: do literal comparison
     if (!srcTable || !destTable) {
-      const isDiff = this.parser.normalize(srcDDL, { ignoreDefiner: true, ignoreWhitespace: true }) !== 
-                     this.parser.normalize(destDDL, { ignoreDefiner: true, ignoreWhitespace: true });
-      return { 
-        tableName: 'unknown', 
-        operations: isDiff ? [{ type: 'MODIFY', target: 'TABLE', name: 'structure' }] : [], 
-        hasChanges: isDiff 
+      const isDiff = this.parser.normalize(srcDDL, { ignoreDefiner: true, ignoreWhitespace: true }) !==
+        this.parser.normalize(destDDL, { ignoreDefiner: true, ignoreWhitespace: true });
+      return {
+        tableName: 'unknown',
+        operations: isDiff ? [{ type: 'MODIFY', target: 'TABLE', name: 'structure' }] : [],
+        hasChanges: isDiff
       };
     }
 
@@ -251,11 +251,11 @@ export class ComparatorService {
       return { type, name, operation: 'DROP' };
     }
 
-    const normSrc = this.parser.normalize(srcDDL, { ignoreDefiner: true, ignoreWhitespace: true });
-    const normDest = this.parser.normalize(destDDL, {
+    const normSrc = this.parser.normalize(this._unescapeHtml(srcDDL), { ignoreDefiner: true, ignoreWhitespace: true }).toLowerCase();
+    const normDest = this.parser.normalize(this._unescapeHtml(destDDL), {
       ignoreDefiner: true,
       ignoreWhitespace: true,
-    });
+    }).toLowerCase();
 
     if (normSrc !== normDest) {
       return { type, name, operation: 'REPLACE', definition: srcDDL };
@@ -564,10 +564,14 @@ export class ComparatorService {
 
         // Save comparison to storage (like legacy _saveComparison)
         await this.storageService.saveComparison({
-          srcEnv, destEnv, database: srcDbName,
-          type: storageType, name, status,
-          alterStatements,
-          diffSummary,
+          id: require('crypto').randomUUID(),
+          source_env: srcEnv,
+          target_env: destEnv,
+          database_name: srcDbName,
+          ddl_type: storageType,
+          ddl_name: name,
+          status: status,
+          alter_statements: alterStatements.length ? JSON.stringify(alterStatements) : '',
         });
       }
     }
@@ -602,6 +606,11 @@ export class ComparatorService {
       return content.replace(norm.pattern, norm.replacement || '');
     }
     return content;
+  }
+
+  private _unescapeHtml(s: string): string {
+    if (!s) return '';
+    return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
   }
 
   /**
@@ -793,8 +802,8 @@ export class ComparatorService {
    * Filter false-positive changes (Legacy parity)
    */
   private _hasRealChange(src: string, dest: string, type: string): boolean {
-    const normSrc = this.parser.normalize(src, { ignoreDefiner: true, ignoreWhitespace: true });
-    const normDest = this.parser.normalize(dest, { ignoreDefiner: true, ignoreWhitespace: true });
+    const normSrc = this.parser.normalize(this._unescapeHtml(src), { ignoreDefiner: true, ignoreWhitespace: true }).toLowerCase();
+    const normDest = this.parser.normalize(this._unescapeHtml(dest), { ignoreDefiner: true, ignoreWhitespace: true }).toLowerCase();
 
     if (normSrc === normDest) return false;
 
@@ -812,8 +821,8 @@ export class ComparatorService {
    */
   async compareArbitraryDDL(srcDDL: string, destDDL: string, type?: string): Promise<any> {
     const detectedType = type || this.parser.detectObjectType(srcDDL);
-    const storageType = (detectedType === 'TABLE' ? 'TABLES' : 
-                         (detectedType === 'UNKNOWN' ? 'SQL' : detectedType + 'S')) as any;
+    const storageType = (detectedType === 'TABLE' ? 'TABLES' :
+      (detectedType === 'UNKNOWN' ? 'SQL' : detectedType + 'S')) as any;
 
     if (detectedType === 'TABLE') {
       const tableDiff = this.compareTables(srcDDL, destDDL);
@@ -824,7 +833,7 @@ export class ComparatorService {
       } else if (tableDiff.hasChanges && alterStatements.length === 0) {
         alterStatements.push(srcDDL);
       }
-      
+
       return {
         name: tableDiff.tableName || 'arbitrary',
         status: tableDiff.hasChanges ? 'different' : (srcDDL.trim() !== destDDL.trim() ? 'different' : 'equal'),
@@ -862,7 +871,7 @@ export class ComparatorService {
     const destDDL = await this.storageService.getDDL(dest.env, dest.db, dest.type, dest.name);
 
     const result = await this.compareArbitraryDDL(srcDDL, destDDL, src.type.replace(/S$/, ''));
-    
+
     // Override name to be more descriptive for custom selection
     result.name = `${src.name} vs ${dest.name}`;
     return result;
@@ -881,7 +890,7 @@ export class ComparatorService {
    * setupMigrationFolder (Legacy parity)
    */
   setupMigrationFolder(srcEnv: string, destEnv: string, dbName: string): string {
-    const folder = `db/map-migrate/${srcEnv}-to-${destEnv}/${dbName}`;
+    const folder = `map-migrate/${srcEnv}-to-${destEnv}/${dbName}`;
     if (!fs.existsSync(folder)) {
       fs.mkdirSync(folder, { recursive: true });
     }

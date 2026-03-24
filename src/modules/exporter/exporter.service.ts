@@ -20,7 +20,7 @@ export class ExporterService {
     envName: string,
     specificName?: string,
     typeFilter?: string,
-    onProgress?: (progress: { type: string; current: number; total: number; objectName: string }) => void
+    onProgress?: (progress: { type: string; current: number; total: number; objectName: string; state?: string }) => void
   ) {
     console.log(`📦 [Exporter] exportSchema called: env=${envName}, name=${specificName || 'ALL'}, typeFilter=${typeFilter || 'ALL'}`);
 
@@ -40,7 +40,8 @@ export class ExporterService {
       const introspection = driver.getIntrospectionService();
       const dbName = connection.config.database || 'default';
 
-      const baseDir = path.join(process.cwd(), 'db', envName, dbName);
+      const projectBaseDir = this.storageService.getProjectBaseDir ? this.storageService.getProjectBaseDir() : process.cwd();
+      const baseDir = path.join(projectBaseDir, 'db', envName, dbName);
       this._ensureDir(baseDir);
       this._ensureDir(path.join(baseDir, 'current-ddl'));
 
@@ -63,6 +64,10 @@ export class ExporterService {
         const list = await this._listObjects(introspection, dbName, type, specificName);
         console.log(`📊 [Exporter] ${pluralType}: found ${list.length} objects`);
         summary[pluralType] = list.length;
+
+        if (list.length > 0 && onProgress) {
+          onProgress({ type: pluralType, current: 0, total: list.length, objectName: '', state: 'starting_type' });
+        }
 
         const exportedNames: string[] = [];
         let savedCount = 0;
@@ -89,7 +94,6 @@ export class ExporterService {
             // Save to file — always write, even if DDL is empty
             fs.writeFileSync(path.join(dir, `${name}.sql`), ddl || '');
             exportedNames.push(name);
-
             // Save to storage — always save so it appears in sidebar list
             await this.storageService.saveDDL(envName, dbName, pluralType, name, ddl || '');
             savedCount++;
@@ -216,7 +220,8 @@ export class ExporterService {
         content = this._convertToCSV(data);
       }
 
-      const finalPath = outputPath || path.join(process.cwd(), 'exports', `${tableName}.${format}`);
+      const projectBaseDir = this.storageService.getProjectBaseDir ? this.storageService.getProjectBaseDir() : process.cwd();
+      const finalPath = outputPath || path.join(projectBaseDir, 'exports', `${tableName}.${format}`);
       this._ensureDir(path.dirname(finalPath));
       fs.writeFileSync(finalPath, content);
 

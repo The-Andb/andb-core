@@ -1,5 +1,5 @@
 /**
- * Central registry of all toggleable features in The Andb.
+ * Central registry of all toggleable features in TheAndb.
  * Used for both build-time gating and runtime checks.
  */
 export enum FeatureKey {

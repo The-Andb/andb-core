@@ -1,4 +1,4 @@
-# The Andb Core Engine 🚀
+# TheAndb Core Engine 🚀
 
 **The Professional AI-Driven Database Infrastructure Engine.**
 AST-powered Safety, Deep Semantic Analysis, and Professional Orchestration.
@@ -7,7 +7,7 @@ AST-powered Safety, Deep Semantic Analysis, and Professional Orchestration.
 
 ## 🌟 Overview
 
-**The Andb Core** is the high-performance engine powering the entire Andb ecosystem. Optimized for the **AI-First Era (2026)**, it provides the bridge between natural language reasoning and reliable database schema management.
+**TheAndb Core** is the high-performance engine powering the entire Andb ecosystem. Optimized for the **AI-First Era (2026)**, it provides the bridge between natural language reasoning and reliable database schema management.
 
 This engine doesn't just "compare text"; it **understands intent** through AST (Abstract Syntax Tree) analysis, protecting your production environments from destructive operations and providing human-level semantic insights.
 
@@ -85,7 +85,7 @@ We are currently in **Phase 4.5** of our master plan. Our goal is 100% parity wi
 
 ## 📄 License & Commercial
 
-**The Andb Public License (APL-1.0)**
+**TheAndb Public License (APL-1.0)**
 
 - ✅ **Source-Available**: View, Clone, Run locally for evaluation.
 - ❌ **No Commercial Use**: Production, SaaS, Redistribution are prohibited without a license.
@@ -95,4 +95,4 @@ See [LICENSE](../LICENSE) for full terms.
 ---
 
 **Keep Going. Keep Syncing.**  
-Made with ❤️ by [The Andb Team](https://github.com/The-Andb)
+Made with ❤️ by [TheAndb Team](https://github.com/The-Andb)

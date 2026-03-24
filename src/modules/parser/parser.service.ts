@@ -1,5 +1,7 @@
+import { MysqlAstParser } from './adapters/mysql-ast.parser';
 
 export class ParserService {
+  private astParser = new MysqlAstParser();
   /**
    * Remove DEFINER clause from DDL
    * Handles CREATE [DEFINER=...] PROCEDURE/FUNCTION/VIEW/TRIGGER/EVENT
@@ -432,6 +434,54 @@ export class ParserService {
    * Parse CREATE TABLE statement into rich structured components for UI visualization
    */
   parseTableDetailed(tableSQL: string): {
+    tableName: string;
+    columns: any[];
+    indexes: any[];
+    foreignKeys: any[];
+    options: any;
+    partitions: string | null;
+  } | null {
+    try {
+       // Attempt AST parsing first
+       const ast = this.astParser.parseTableDetailed(tableSQL);
+       if (ast) {
+          const pkSet = new Set(ast.indexes.filter((i: any) => i.type === 'PRIMARY').flatMap((i: any) => i.columns));
+          const uniqueSet = new Set(ast.indexes.filter((i: any) => i.type === 'UNIQUE').flatMap((i: any) => i.columns));
+
+          const mappedColumns = ast.columns.map((c: any) => ({
+             name: c.name,
+             type: c.dataType.toUpperCase(),
+             pk: pkSet.has(c.name),
+             notNull: !c.nullable,
+             unique: uniqueSet.has(c.name),
+             unsigned: !!c.unsigned,
+             autoIncrement: c.autoIncrement,
+             default: c.defaultValue,
+             comment: c.comment,
+             definition: c.rawDefinition
+          }));
+
+          return {
+             tableName: ast.tableName,
+             columns: mappedColumns,
+             indexes: ast.indexes,
+             foreignKeys: ast.foreignKeys,
+             options: ast.options,
+             partitions: ast.partitions
+          };
+       }
+    } catch (e) {
+       console.warn('AST Parser failed, falling back to Regex. Error:', (e as Error).message);
+    }
+
+    // Fallback to legacy regex implementation
+    return this.parseTableDetailedRegex(tableSQL);
+  }
+
+  /**
+   * Legacy Regex-based Parser (Kept for testing & fallback)
+   */
+  parseTableDetailedRegex(tableSQL: string): {
     tableName: string;
     columns: any[];
     indexes: any[];

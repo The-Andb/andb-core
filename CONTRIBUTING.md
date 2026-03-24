@@ -1,6 +1,6 @@
-# Contributing to The Andb
+# Contributing to TheAndb
 
-Thank you for your interest in The Andb!
+Thank you for your interest in TheAndb!
 
 **Please Note:** This project is **Source-Available but Proprietary**.
 
@@ -18,10 +18,10 @@ Please use the GitHub Issues tab to report problems.
 
 ## 🤝 Contributor License Agreement (CLA)
 
-If you are interested in contributing code to the project (e.g., as a partner or contracted developer), you must sign a **Contributor License Agreement (CLA)** granting The Andb full rights to your contributions.
+If you are interested in contributing code to the project (e.g., as a partner or contracted developer), you must sign a **Contributor License Agreement (CLA)** granting TheAndb full rights to your contributions.
 
 Please contact `ph4n4n@gmail.com` for more information.
 
 ## 📜 License
 
-By interacting with this repository, you agree to the terms of the **The Andb Public License (APL-1.0)** found in the `LICENSE` file.
+By interacting with this repository, you agree to the terms of the **TheAndb Public License (APL-1.0)** found in the `LICENSE` file.

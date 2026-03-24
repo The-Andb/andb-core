@@ -1,12 +1,11 @@
 import { StorageService } from '../storage.service';
-import { IStorageDriver } from '../interfaces/storage-driver.interface';
+import { ICoreStorageStrategy } from '../interfaces/core-storage-strategy.interface';
 import * as path from 'path';
 import * as os from 'os';
-import * as fs from 'fs';
 
 describe('StorageService', () => {
   let service: StorageService;
-  let mockDriver: jest.Mocked<IStorageDriver>;
+  let mockStrategy: jest.Mocked<ICoreStorageStrategy>;
   let tmpDir: string;
   let dbPath: string;
 
@@ -14,21 +13,40 @@ describe('StorageService', () => {
     tmpDir = path.join(os.tmpdir(), `andb-test-${Date.now()}`);
     dbPath = path.join(tmpDir, 'test-storage.db');
     
-    mockDriver = {
+    mockStrategy = {
       initialize: jest.fn().mockResolvedValue(undefined),
       close: jest.fn().mockResolvedValue(undefined),
-      execute: jest.fn().mockResolvedValue({ changes: 1 }),
-      exec: jest.fn().mockResolvedValue(undefined),
-      queryAll: jest.fn().mockResolvedValue([]),
-      queryOne: jest.fn().mockResolvedValue(null),
-      transaction: jest.fn().mockImplementation(async (fn) => fn(mockDriver)),
-      getDbPath: jest.fn().mockReturnValue(dbPath),
-      isInitialized: jest.fn().mockReturnValue(true),
+      getDataSource: jest.fn().mockReturnValue({}),
+      saveProject: jest.fn().mockResolvedValue(undefined),
+      getProjects: jest.fn().mockResolvedValue([]),
+      deleteProject: jest.fn().mockResolvedValue(undefined),
+      saveProjectEnvironment: jest.fn().mockResolvedValue(undefined),
+      getProjectEnvironments: jest.fn().mockResolvedValue([]),
+      deleteProjectEnvironment: jest.fn().mockResolvedValue(undefined),
+      saveProjectSetting: jest.fn().mockResolvedValue(undefined),
+      getProjectSettings: jest.fn().mockResolvedValue({}),
+      saveUserSetting: jest.fn().mockResolvedValue(undefined),
+      getUserSettings: jest.fn().mockResolvedValue({}),
+      getMetadata: jest.fn().mockResolvedValue(null),
+      setMetadata: jest.fn().mockResolvedValue(undefined),
+      saveDdlExport: jest.fn().mockResolvedValue(undefined),
+      getDdlExports: jest.fn().mockResolvedValue([]),
+      saveSnapshot: jest.fn().mockResolvedValue(undefined),
+      getSnapshot: jest.fn().mockResolvedValue(null),
+      getAllSnapshots: jest.fn().mockResolvedValue([]),
+      saveComparison: jest.fn().mockResolvedValue(undefined),
+      getComparisons: jest.fn().mockResolvedValue([]),
+      getLatestComparisons: jest.fn().mockResolvedValue([]),
+      saveMigrationHistory: jest.fn().mockResolvedValue(1),
+      updateMigrationStatus: jest.fn().mockResolvedValue(undefined),
+      getMigrationHistory: jest.fn().mockResolvedValue([]),
+      queryRaw: jest.fn().mockResolvedValue([]),
+      executeRaw: jest.fn().mockResolvedValue(undefined)
     } as any;
 
     service = new StorageService();
     process.env.ANDB_QUIET = '1';
-    await service.initialize(mockDriver, dbPath);
+    await service.initialize(mockStrategy, dbPath);
   });
 
   afterEach(async () => {
@@ -37,53 +55,40 @@ describe('StorageService', () => {
   });
 
   describe('initialize', () => {
-    it('should initialize the driver', () => {
-      expect(mockDriver.initialize).toHaveBeenCalledWith(dbPath);
+    it('should initialize the strategy', () => {
+      expect(mockStrategy.initialize).toHaveBeenCalledWith(dbPath);
     });
   });
 
-  describe('DDL operations', () => {
-    it('should save DDL via driver', async () => {
-      await service.saveDDL('DEV', 'mydb', 'TABLES', 'users', 'CREATE TABLE users;');
-      expect(mockDriver.execute).toHaveBeenCalled();
+  describe('Project operations', () => {
+    it('should save project via strategy', async () => {
+      const p = { id: 'p1', name: 'proj1' };
+      await service.saveProject(p);
+      expect(mockStrategy.saveProject).toHaveBeenCalledWith(p);
     });
 
-    it('should retrieve DDL via driver', async () => {
-      mockDriver.queryOne.mockResolvedValueOnce({ ddl_content: 'SELECT 1' });
-      const ddl = await service.getDDL('DEV', 'mydb', 'TABLES', 'users');
-      expect(ddl).toBe('SELECT 1');
-      expect(mockDriver.queryOne).toHaveBeenCalled();
-    });
-
-    it('should return null for non-existent DDL', async () => {
-      mockDriver.queryOne.mockResolvedValueOnce(null);
-      const ddl = await service.getDDL('DEV', 'mydb', 'TABLES', 'nonexistent');
-      expect(ddl).toBeNull();
+    it('should retrieve projects via strategy', async () => {
+      const p = [{ id: 'p1', name: 'proj1' }];
+      mockStrategy.getProjects.mockResolvedValueOnce(p);
+      const res = await service.getProjects();
+      expect(res).toEqual(p);
     });
   });
 
   describe('Comparison operations', () => {
-    it('should save comparison via driver', async () => {
-      await service.saveComparison({
-        srcEnv: 'DEV', destEnv: 'PROD', database: 'mydb',
-        type: 'TABLES', name: 'users', status: 'CHANGED',
-      });
-      expect(mockDriver.execute).toHaveBeenCalled();
-    });
-  });
-
-  describe('Maintenance', () => {
-    it('should clear all data via driver transaction', async () => {
-      await service.clearAll();
-      expect(mockDriver.transaction).toHaveBeenCalled();
-      expect(mockDriver.execute).toHaveBeenCalledWith('DELETE FROM ddl_exports');
+    it('should save comparison via strategy', async () => {
+      await service.saveComparison('DEV', 'PROD', 'mydb', 'TABLES', 'users', 'CHANGED', '');
+      expect(mockStrategy.saveComparison).toHaveBeenCalledWith(expect.objectContaining({
+        source_env: 'DEV', target_env: 'PROD', database_name: 'mydb',
+        ddl_type: 'TABLES', ddl_name: 'users', status: 'CHANGED'
+      }));
     });
   });
 
   describe('close', () => {
-    it('should close the driver', async () => {
+    it('should close the strategy', async () => {
       await service.close();
-      expect(mockDriver.close).toHaveBeenCalled();
+      expect(mockStrategy.close).toHaveBeenCalled();
     });
   });
 });

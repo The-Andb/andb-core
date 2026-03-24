@@ -52,6 +52,8 @@ export class OrchestrationService {
         return await this.schemaOrchestrator.compareArbitraryDDL(payload);
       case 'compare-custom':
         return await this.schemaOrchestrator.compareCustomSelection(payload);
+      case 'generate':
+        return await this.schemaOrchestrator.generate(payload);
       case 'setup-restricted-user':
         return await this.securityOrchestrator.setupRestrictedUser(payload);
       case 'generate-user-setup-script':

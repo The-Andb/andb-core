@@ -1,8 +1,8 @@
 {
   "name": "@the-andb/core",
   "version": "4.0.2",
-  "description": "The Andb - Simplest Database Migration Tool",
-  "author": "The Andb (ph4n4n)",
+  "description": "TheAndb - Simplest Database Migration Tool",
+  "author": "TheAndb (ph4n4n)",
   "publishConfig": {
     "access": "public"
   },
@@ -62,8 +62,10 @@
     "js-yaml": "^4.1.1",
     "mysql2": "^3.14.3",
     "node-sql-parser": "^5.4.0",
+    "reflect-metadata": "^0.2.2",
     "simple-git": "^3.32.3",
-    "ssh2": "^1.15.0"
+    "ssh2": "^1.15.0",
+    "typeorm": "^0.3.28"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",

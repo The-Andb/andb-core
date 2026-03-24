@@ -10,7 +10,7 @@ import { ConnectionType } from './common/interfaces/connection.interface';
 
 // Services
 import { StorageService } from './modules/storage/storage.service';
-import { SqliteStorageDriver } from './modules/storage/drivers/sqlite-storage.driver';
+import { ICoreStorageStrategy } from './modules/storage/interfaces/core-storage-strategy.interface';
 import { ProjectConfigService } from './modules/config/project-config.service';
 import { YamlImporterService } from './modules/config/yaml-importer.service';
 import { ParserService } from './modules/parser/parser.service';
@@ -105,6 +105,7 @@ export class Container {
       this.semanticDiff,
       this.gitOrchestrator,
       this.dependencySearch,
+      this.parser,
     );
 
     // 4. Root orchestrator
@@ -121,15 +122,12 @@ export class Container {
   /**
    * Async initialization of services (like storage)
    */
-  public async init(dbPath: string) {
-    if (!dbPath) {
-      throw new Error('Container.init(): dbPath is required. No fallback allowed for Single Source of Truth.');
+  public async init(strategy: ICoreStorageStrategy, dbPath: string, projectBaseDir?: string) {
+    if (!strategy) {
+      throw new Error('Container.init(): ICoreStorageStrategy is required.');
     }
     const finalDbPath = dbPath;
-    // Default to SQLite driver for now. 
-    // In the future, this can be passed from the outside (e.g. CLI vs Desktop)
-    const driver = new SqliteStorageDriver();
-    await this.storage.initialize(driver, finalDbPath);
+    await this.storage.initialize(strategy, finalDbPath, projectBaseDir);
 
     try {
       this.lastMigrationReport = await this.runDogfoodMigration(finalDbPath);
@@ -262,10 +260,10 @@ export class Container {
   /**
    * Create or retrieve singleton container
    */
-  static async create(dbPath: string): Promise<Container> {
+  static async create(strategy: ICoreStorageStrategy, dbPath: string, projectBaseDir?: string): Promise<Container> {
     if (this.instance) return this.instance;
     const container = new Container();
-    await container.init(dbPath);
+    await container.init(strategy, dbPath, projectBaseDir);
     this.instance = container;
     return this.instance;
   }

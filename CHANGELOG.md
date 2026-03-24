@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the **Framework rewrite** of The Andb Core will be documented in this file.
+All notable changes to the **Framework rewrite** of TheAndb Core will be documented in this file.
 
 ---
 

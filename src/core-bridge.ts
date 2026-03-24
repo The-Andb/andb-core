@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { Container } from './container';
 import { ParserService } from './modules/parser/parser.service';
+import { ICoreStorageStrategy } from './modules/storage/interfaces/core-storage-strategy.interface';
 
 export class CoreBridge {
   private static container: Container | null = null;
@@ -11,7 +12,7 @@ export class CoreBridge {
   /**
    * Initialize the Core Engine (Singleton with Lock)
    */
-  public static async init(userDataPath: string, customDbPath?: string) {
+  public static async init(userDataPath: string, customDbPath?: string, strategy?: ICoreStorageStrategy, projectBaseDir?: string) {
     if (this.container) return this.container;
 
     if (this.initPromise) {
@@ -27,6 +28,10 @@ export class CoreBridge {
       if (!dbPath) {
         throw new Error('CoreBridge.init(): dbPath could not be resolved. Either userDataPath or customDbPath must be provided.');
       }
+      
+      if (!strategy) {
+        throw new Error('CoreBridge.init(): ICoreStorageStrategy MUST be provided by the runtime environment (Desktop/CLI).');
+      }
 
       this.resolvedDbPath = dbPath;
 
@@ -39,7 +44,7 @@ export class CoreBridge {
         }
       }
 
-      this.container = await Container.create(dbPath);
+      this.container = await Container.create(strategy, dbPath, projectBaseDir);
       console.log('✅ [CoreBridge] Engine Ready.');
       return this.container;
     })();

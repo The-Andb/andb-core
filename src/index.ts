@@ -1,11 +1,20 @@
 // Core Bridge & Container
 export * from './core-bridge';
-export { Container } from './container';
+export * from './container';
+
+// Explicitly export storage interfaces for Dependency Inversion
+export * from './modules/storage/interfaces/core-storage-strategy.interface';
+export * from './modules/storage/interfaces/core-domain.types';
+
+// Storage Strategy & Entities
+export * from './modules/storage/entities/core';
+export * from './modules/storage/strategy/base-storage.strategy';
 
 // Interfaces
 export * from './common/interfaces/connection.interface';
 export * from './common/interfaces/driver.interface';
 export * from './common/interfaces/schema.interface';
+export * from './common/interfaces/result.interface';
 
 // Services
 export * from './modules/storage/storage.service';

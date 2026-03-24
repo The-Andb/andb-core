@@ -28,7 +28,16 @@ export class ProjectConfigService {
          return;
       }
       
-      const defaultProject = projects[0];
+      const userSettings = await this.storageService.getUserSettings();
+      let defaultProject = projects[0];
+
+      if (userSettings && userSettings.default_cli_project_id) {
+         const found = projects.find((p: any) => p.id === userSettings.default_cli_project_id);
+         if (found) {
+            defaultProject = found;
+         }
+      }
+
       this.activeProjectId = defaultProject.id;
       
       // 2. Fetch all environments 

@@ -17,6 +17,7 @@ export class SchemaOrchestrator {
     private semanticDiff: any,
     private readonly gitOrchestrator: GitOrchestrator,
     private readonly dependencySearch: any, // Using any for now to avoid complex type imports if not readily available
+    private readonly parser: any,
   ) { }
 
   async exportSchema(payload: any) {
@@ -159,6 +160,28 @@ export class SchemaOrchestrator {
     return await this.comparator.compareCustomSelection(src, dest);
   }
 
+  async generate(payload: any) {
+    const { srcEnv, destEnv, type, name } = payload;
+    
+    const srcConn = this.configService.getConnection(srcEnv);
+    const destConn = this.configService.getConnection(destEnv);
+    if (!destConn) throw new Error(`Destination connection ${destEnv} not found`);
+
+    const srcDbName = srcConn?.config?.database || 'default';
+    const destDbName = destConn.config?.database || 'default';
+
+    const diffResults = await this.comparator.compareFromStorage(srcEnv, destEnv, srcDbName, destDbName, type, name);
+
+    const ddlList: string[] = [];
+
+    const itemDiff = diffResults.find((r: any) => r.name === name);
+    if (itemDiff && itemDiff.alterStatements && itemDiff.alterStatements.length > 0) {
+       return { success: true, data: { sql: itemDiff.alterStatements.join('\n') } };
+    }
+    
+    return { success: true, data: { sql: '-- No changes detected' } };
+  }
+
   async migrateSchema(payload: any) {
     const { srcEnv, destEnv, objects, gitConfig, dryRun = false } = payload;
     const destConn = this.configService.getConnection(destEnv);
@@ -170,24 +193,44 @@ export class SchemaOrchestrator {
       throw new Error(`Migration safety: Cannot execute migration into a static SQL file "${destEnv}".`);
     }
 
-    if (!Array.isArray(objects) || objects.length === 0) {
-      this.logger.info('No objects to migrate.');
-      return { success: true, successful: [], failed: [], dryRun, safetyLevel: 'safe', totalStatements: 0 };
+    let itemsToProcess = objects;
+    
+    // Support single item direct mode from options
+    if (!Array.isArray(itemsToProcess) || itemsToProcess.length === 0) {
+      if (payload.type && payload.name && payload.name !== 'batch') {
+          itemsToProcess = [{ type: payload.type, name: payload.name, status: 'UPDATED' }];
+      } else {
+          this.logger.info('No objects to migrate.');
+          return { success: true, successful: [], failed: [], dryRun, safetyLevel: 'safe', totalStatements: 0 };
+      }
     }
 
-    if (!Array.isArray(objects) || objects.length === 0) {
-      this.logger.info('No objects to migrate.');
-      return { success: true, successful: [], failed: [], dryRun, safetyLevel: 'safe', totalStatements: 0 };
-    }
-
-    // Rule: Never migrate DROP. Filter out DEPRECATED objects.
-    const safeObjects = objects.filter((obj: any) =>
+    const safeObjects = itemsToProcess.filter((obj: any) =>
       obj.status !== 'DEPRECATED' && obj.status !== 'deprecated' && obj.status !== 'missing_in_source'
     );
 
     if (safeObjects.length === 0) {
       this.logger.info('All selected objects are DEPRECATED (DROP). Migration skipped by safety rule.');
       return { success: true, successful: [], failed: [], dryRun, safetyLevel: 'safe', totalStatements: 0, skippedDrops: objects.length };
+    }
+
+    const srcConn = this.configService.getConnection(srcEnv);
+    const srcDbName = srcConn?.config?.database || 'default';
+    const destDbName = destConn?.config?.database || 'default';
+    
+    const dDestDriver = await this.driverFactory.create(destConn.type, destConn.config);
+    const migratorDriver = dDestDriver.getMigrator();
+
+    // Auto-generate DDL if missing
+    for (const obj of safeObjects) {
+       if (!obj.ddl) {
+          const diffResults = await this.comparator.compareFromStorage(srcEnv, destEnv, srcDbName, destDbName, obj.type, obj.name);
+          
+          const itemDiff = diffResults.find((r: any) => r.name === obj.name);
+          if (itemDiff && itemDiff.alterStatements && itemDiff.alterStatements.length > 0) {
+             obj.ddl = itemDiff.alterStatements;
+          }
+       }
     }
 
     const allStatements = safeObjects.flatMap((obj: any) =>
@@ -264,6 +307,34 @@ export class SchemaOrchestrator {
             if (statement) await destDriver.query(statement);
           }
           successful.push(obj);
+
+          // Auto-Sync to Storage
+          // Ensure the local storage export is updated immediately so the comparison UI reflects 'EQUAL'
+          try {
+             // Normalized type for storage (e.g. procedures -> PROCEDURES, tables -> TABLES)
+             const storageType = obj.type.toUpperCase();
+             const isDrop = obj.status === 'DEPRECATED' || obj.status === 'deprecated' || obj.status === 'missing_in_source';
+
+             if (isDrop) {
+                // Remove from storage to reflect drop
+                await this.storageService.deleteDDL(destEnv, dbName, storageType, obj.name);
+                this.logger.info(`Auto-synced (DELETE) storage for ${storageType} ${obj.name}`);
+             } else {
+                let newDdl = await destIntro.getObjectDDL(dbName, obj.type, obj.name);
+                if (newDdl) {
+                   // Normalize: Uppercase keywords so it matches what ExporterService does natively before saving
+                   newDdl = this.parser.uppercaseKeywords(newDdl);
+                   
+                   await this.storageService.saveDDL(destEnv, dbName, storageType, obj.name, newDdl);
+                   this.logger.info(`Auto-synced (UPSERT) storage for ${storageType} ${obj.name}`);
+                } else {
+                   this.logger.warn(`Could not fetch new DDL for ${obj.name} after migration to update storage.`);
+                }
+             }
+          } catch (syncErr: any) {
+             this.logger.warn(`Failed to auto-sync DDL to storage post-migration for ${obj.name}: ${syncErr.message}`);
+          }
+
         } catch (err: any) {
           failed.push({ ...obj, error: err.message });
           this.logger.error(`Migration failed for ${obj.name}: ${err.message}`);
