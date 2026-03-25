@@ -11,40 +11,67 @@ export class YamlImporterService {
   constructor(private readonly storageService: StorageService) {}
 
   public async runImportIfNecessary(): Promise<void> {
-    const cwdConfigPath = path.join(process.cwd(), 'andb.yaml');
-    const legacyConfigPath = path.join(process.cwd(), 'config', 'andb.yaml');
-    
-    let targetPath = '';
-    if (fs.existsSync(cwdConfigPath)) {
-      targetPath = cwdConfigPath;
-    } else if (fs.existsSync(legacyConfigPath)) {
-      targetPath = legacyConfigPath;
-    }
+    const cwd = process.cwd();
+    const yamlPaths: string[] = [];
 
-    if (!targetPath) {
+    // 1. Check root
+    const rootCwdConfig = path.join(cwd, 'andb.yaml');
+    const rootLegacyConfig = path.join(cwd, 'config', 'andb.yaml');
+    if (fs.existsSync(rootCwdConfig)) yamlPaths.push(rootCwdConfig);
+    else if (fs.existsSync(rootLegacyConfig)) yamlPaths.push(rootLegacyConfig);
+
+    // 2. Scan immediate subdirectories for legacy project setups
+    try {
+      const entries = fs.readdirSync(cwd, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.')) {
+          const subBase = path.join(cwd, entry.name, 'andb.yaml');
+          const subLegacy = path.join(cwd, entry.name, 'config', 'andb.yaml');
+          if (fs.existsSync(subBase)) {
+            yamlPaths.push(subBase);
+          } else if (fs.existsSync(subLegacy)) {
+            yamlPaths.push(subLegacy);
+          }
+        }
+      }
+    } catch (e) {}
+
+    if (yamlPaths.length === 0) {
       return; // No legacy config found to import
     }
 
     try {
-      this.logger.info(`Found legacy configuration at ${targetPath}. Starting YAML to SQLite dogfooding import...`);
-      const rawFile = fs.readFileSync(targetPath, 'utf8');
-      const doc = yaml.load(rawFile) as any || {};
-
       // Do we already have this imported? Let's check projects.
       const existingProjects = await this.storageService.getProjects();
       if (existingProjects && existingProjects.length > 0) {
         this.logger.info(`Projects already exist in SQLite. Skipping YAML import to prevent overwriting.`);
-        this._backupYamlFile(targetPath);
+        // Note: we selectively let it skip if db is already populated.
         return;
       }
 
-      await this._importToSqlite(doc);
-      
-      this.logger.info(`Successfully imported legacy YAML configuration into SQLite.`);
-      this._backupYamlFile(targetPath);
+      for (const targetPath of yamlPaths) {
+        this.logger.info(`Found legacy configuration at ${targetPath}. Starting YAML to SQLite dogfooding import...`);
+        try {
+          const rawFile = fs.readFileSync(targetPath, 'utf8');
+          const doc = yaml.load(rawFile) as any || {};
 
+          // Deduce project name from directory
+          let dirPath = path.dirname(targetPath);
+          if (path.basename(dirPath) === 'config') {
+             dirPath = path.dirname(dirPath);
+          }
+          const parentDirName = path.basename(dirPath);
+
+          await this._importToSqlite(doc, parentDirName);
+          
+          this.logger.info(`Successfully imported legacy YAML configuration into SQLite.`);
+          this._backupYamlFile(targetPath);
+        } catch (e: any) {
+          this.logger.error(`YAML Import Failed for ${targetPath}: ${e.message}`);
+        }
+      }
     } catch (e: any) {
-      this.logger.error(`YAML Import Failed: ${e.message}`);
+      this.logger.error(`YAML Import Scan Failed: ${e.message}`);
     }
   }
 
@@ -58,10 +85,10 @@ export class YamlImporterService {
     }
   }
 
-  private async _importToSqlite(doc: any) {
+  private async _importToSqlite(doc: any, fallbackName?: string) {
     // 1. Create a Default Project for the imported config
     const projectId = crypto.randomUUID();
-    const projectName = doc.name || path.basename(process.cwd()) || 'Imported Legacy Project';
+    const projectName = doc.name || fallbackName || path.basename(process.cwd()) || 'Imported Legacy Project';
     
     await this.storageService.saveProject({
       id: projectId,
