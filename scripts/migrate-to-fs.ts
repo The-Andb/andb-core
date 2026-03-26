@@ -10,10 +10,10 @@ import { ComparisonEntity } from '../src/modules/storage/entities/core/Compariso
 import { MigrationHistoryEntity } from '../src/modules/storage/entities/core/MigrationHistoryEntity';
 
 async function migrate() {
-    console.log('--- The-Andb FileSystem Migration Script ---');
+    console.log('--- TheAndb FileSystem Migration Script ---');
 
     // Try different possible AppData folders for the Electron app
-    const possibleFolders = ['TheAndb_v3_dev', 'The Andb Dev_v3_dev', 'TheAndb', 'The Andb'];
+    const possibleFolders = ['TheAndb_v3_dev', 'TheAndb Dev_v3_dev', 'TheAndb'];
     const appDataRoot = path.join(homedir(), 'Library', 'Application Support');
     
     let dbConfigPath = '';
