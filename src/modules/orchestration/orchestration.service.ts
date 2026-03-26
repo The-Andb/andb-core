@@ -18,6 +18,8 @@ export class OrchestrationService {
     public readonly parser: ParserService,
   ) { }
 
+  public migrationReport: any = null;
+
   async execute(operation: string, payload: any) {
     this.logger.info(`Executing operation: ${operation}`);
 
@@ -74,6 +76,8 @@ export class OrchestrationService {
         return await this.updateFeatureFlag(payload);
       case 'getFeaturesStatus':
         return await this.getFeaturesStatus();
+      case 'getLastMigrationReport':
+        return this.migrationReport;
       default:
         throw new Error(`Unknown operation: ${operation}`);
     }

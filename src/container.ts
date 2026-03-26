@@ -131,6 +131,7 @@ export class Container {
 
     try {
       this.lastMigrationReport = await this.runDogfoodMigration(finalDbPath);
+      this.orchestrator.migrationReport = this.lastMigrationReport;
     } catch (e: any) {
       console.error(`[Dogfooding] Internal Migration Failed: ${e.message}`);
     }
