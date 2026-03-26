@@ -155,9 +155,9 @@ export interface ISchemaDiff {
 // Semantic Diffing (Phase 2)
 export interface ISemanticChange {
   type: string; // e.g., 'DATATYPE_CHANGE', 'NULLABILITY_CHANGE', 'DEFAULT_VALUE_CHANGE'
-  property: string; // e.g., 'type', 'isNullable', 'defaultValue'
-  oldValue: any;
-  newValue: any;
+  property?: string; // e.g., 'type', 'isNullable', 'defaultValue'
+  oldValue?: any;
+  newValue?: any;
   description: string;
 }
 
