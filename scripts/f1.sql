@@ -1,26 +1,10 @@
-
--- Table 1: Identical
-CREATE TABLE `users` (
+CREATE TABLE `orders` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `username` varchar(50) NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB;
-
--- Table 2: Changed
-CREATE TABLE `products` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `price` decimal(10,2) DEFAULT '0.00',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB;
-
--- View: Removed in f2
-CREATE VIEW `v_users` AS SELECT * FROM `users`;
-
--- Procedure: Identical
-DELIMITER ;;
-CREATE PROCEDURE `get_user`(IN p_id INT)
-BEGIN
-  SELECT * FROM users WHERE id = p_id;
-END ;;
-DELIMITER ;
+  `user_id` int(11) unsigned NOT NULL,
+  `total_amount` decimal(10,2) DEFAULT '0.00' COMMENT 'Total price',
+  `status` varchar(20) DEFAULT 'PENDING',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_status` (`status`),
+  CONSTRAINT `fk_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -51,7 +51,8 @@
     "compare:prod:events": "andb compare -e PROD",
     "compare:prod:report": "andb compare -r PROD",
     "compare:prod:off": "pnpm run compare:prod:fn && pnpm run compare:prod:sp && pnpm run compare:prod:tbl && pnpm run compare:prod:trg && pnpm run compare:prod:views && pnpm run compare:prod:events && pnpm run compare:prod:report",
-    "compare:prod": "pnpm run export:dev && pnpm run export:prod && pnpm run compare:prod:off"
+    "compare:prod": "pnpm run export:dev && pnpm run export:prod && pnpm run compare:prod:off",
+    "playground": "ts-node scripts/playground.ts"
   },
   "dependencies": {
     "andb-logger": "^1.0.3",

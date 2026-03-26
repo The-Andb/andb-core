@@ -1,34 +1,10 @@
-
--- Table 1: Identical
-CREATE TABLE `users` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `username` varchar(50) NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB;
-
--- Table 2: Changed (Added a column)
-CREATE TABLE `products` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `price` decimal(10,2) DEFAULT '0.00',
-  `stock` int(11) DEFAULT '0',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB;
-
--- Table 3: New
-CREATE TABLE `categories` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(50) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB;
-
--- View: Removed in f2 (not present here)
-
--- Procedure: Changed
-DELIMITER ;;
-CREATE PROCEDURE `get_user`(IN p_id INT)
-BEGIN
-  -- Change in comment
-  SELECT id, username FROM users WHERE id = p_id;
-END ;;
-DELIMITER ;
+CREATE TABLE `orders` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT 'ID of the order',
+  `user_id` int(11) NOT NULL,
+  `total_amount` decimal(12,2) DEFAULT '10.00',
+  `status` varchar(50) NOT NULL DEFAULT 'NEW',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_user_status` (`user_id`, `status`),
+  CONSTRAINT `fk_user_order` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE NO ACTION
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
