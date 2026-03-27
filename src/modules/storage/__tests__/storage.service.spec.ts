@@ -56,7 +56,7 @@ describe('StorageService', () => {
 
   describe('initialize', () => {
     it('should initialize the strategy', () => {
-      expect(mockStrategy.initialize).toHaveBeenCalledWith(dbPath);
+      expect(mockStrategy.initialize).toHaveBeenCalledWith(dbPath, [], undefined);
     });
   });
 

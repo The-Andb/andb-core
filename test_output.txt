@@ -1,0 +1,818 @@
+
+> @the-andb/core@3.3.2 test /Volumes/FlexibleWorkplace/The-Andb/andb-core
+> jest
+
+PASS src/modules/orchestration/orchestration.service.spec.ts
+  ● Console
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ OrchestrationService-INFO >[0m Executing operation: export
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ OrchestrationService-INFO >[0m Executing operation: export
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ OrchestrationService-INFO >[0m Executing operation: test-connection
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ OrchestrationService-INFO >[0m Executing operation: git-status
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ OrchestrationService-INFO >[0m Executing operation: create-snapshot
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ OrchestrationService-INFO >[0m Executing operation: parseTable
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ OrchestrationService-INFO >[0m Executing operation: unknown
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+FAIL src/modules/storage/__tests__/storage.service.spec.ts
+  ● StorageService › initialize › should initialize the strategy
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "/var/folders/cz/f5yc_p0j65z77_crnfjtkwhr0000gp/T/andb-test-1774579293386/test-storage.db"
+    Received: "/var/folders/cz/f5yc_p0j65z77_crnfjtkwhr0000gp/T/andb-test-1774579293386/test-storage.db", [], undefined
+
+    Number of calls: 1
+
+      57 |   describe('initialize', () => {
+      58 |     it('should initialize the strategy', () => {
+    > 59 |       expect(mockStrategy.initialize).toHaveBeenCalledWith(dbPath);
+         |                                       ^
+      60 |     });
+      61 |   });
+      62 |
+
+      at Object.<anonymous> (modules/storage/__tests__/storage.service.spec.ts:59:39)
+
+PASS src/modules/migrator/mysql/__tests__/mysql.migrator.spec.ts
+PASS src/modules/exporter/__tests__/exporter.service.spec.ts
+  ● Console
+
+    console.log
+      📦 [Exporter] exportSchema called: env=dev, name=ALL, typeFilter=ALL
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:25:13)
+
+    console.log
+      ✅ [Exporter] Connection found: type=mysql, host=undefined, db=test_db
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:32:13)
+
+    console.log
+      [Exporter] Full connection config: {"database":"test_db"}
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:33:13)
+
+    console.log
+      🔌 [Exporter] Connecting to mysql...
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:37:15)
+
+    console.log
+      ✅ [Exporter] Connected successfully
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:39:15)
+
+    console.log
+      📋 [Exporter] Filter: "undefined" → normalized: "ALL" → types: [TABLE, VIEW, PROCEDURE, FUNCTION, TRIGGER, EVENT]
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:56:15)
+
+    console.log
+      📊 [Exporter] TABLES: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] TABLES: listed=1, saved=1, emptyDDL=0, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📊 [Exporter] VIEWS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] PROCEDURES: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] FUNCTIONS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] TRIGGERS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] EVENTS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m Exported schema for dev: {"TABLES":1,"VIEWS":0,"PROCEDURES":0,"FUNCTIONS":0,"TRIGGERS":0,"EVENTS":0}
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📦 [Exporter] exportSchema called: env=unknown, name=ALL, typeFilter=ALL
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:25:13)
+
+    console.log
+      ❌ [Exporter] Connection NOT found for env: unknown
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:29:15)
+
+    console.log
+      📦 [Exporter] exportSchema called: env=dev, name=ALL, typeFilter=ALL
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:25:13)
+
+    console.log
+      ✅ [Exporter] Connection found: type=mysql, host=undefined, db=test_db
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:32:13)
+
+    console.log
+      [Exporter] Full connection config: {"database":"test_db"}
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:33:13)
+
+    console.log
+      🔌 [Exporter] Connecting to mysql...
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:37:15)
+
+    console.log
+      ✅ [Exporter] Connected successfully
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:39:15)
+
+    console.log
+      📋 [Exporter] Filter: "undefined" → normalized: "ALL" → types: [TABLE, VIEW, PROCEDURE, FUNCTION, TRIGGER, EVENT]
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:56:15)
+
+    console.log
+      📦 [Exporter] exportSchema called: env=dev, name=ALL, typeFilter=ALL
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:25:13)
+
+    console.log
+      ✅ [Exporter] Connection found: type=mysql, host=undefined, db=test_db
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:32:13)
+
+    console.log
+      [Exporter] Full connection config: {"database":"test_db"}
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:33:13)
+
+    console.log
+      🔌 [Exporter] Connecting to mysql...
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:37:15)
+
+    console.log
+      ✅ [Exporter] Connected successfully
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:39:15)
+
+    console.log
+      📋 [Exporter] Filter: "undefined" → normalized: "ALL" → types: [TABLE, VIEW, PROCEDURE, FUNCTION, TRIGGER, EVENT]
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:56:15)
+
+    console.log
+      📊 [Exporter] TABLES: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] TABLES: listed=1, saved=1, emptyDDL=0, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📊 [Exporter] VIEWS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] PROCEDURES: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] FUNCTIONS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] TRIGGERS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] EVENTS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m Exported schema for dev: {"TABLES":1,"VIEWS":0,"PROCEDURES":0,"FUNCTIONS":0,"TRIGGERS":0,"EVENTS":0}
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📦 [Exporter] exportSchema called: env=dev, name=ALL, typeFilter=ALL
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:25:13)
+
+    console.log
+      ✅ [Exporter] Connection found: type=mysql, host=undefined, db=test_db
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:32:13)
+
+    console.log
+      [Exporter] Full connection config: {"database":"test_db"}
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:33:13)
+
+    console.log
+      🔌 [Exporter] Connecting to mysql...
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:37:15)
+
+    console.log
+      ✅ [Exporter] Connected successfully
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:39:15)
+
+    console.log
+      📋 [Exporter] Filter: "undefined" → normalized: "ALL" → types: [TABLE, VIEW, PROCEDURE, FUNCTION, TRIGGER, EVENT]
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:56:15)
+
+    console.log
+      📊 [Exporter] TABLES: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] TABLES: listed=1, saved=1, emptyDDL=1, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📊 [Exporter] VIEWS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] PROCEDURES: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] FUNCTIONS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] TRIGGERS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] EVENTS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m Exported schema for dev: {"TABLES":1,"VIEWS":0,"PROCEDURES":0,"FUNCTIONS":0,"TRIGGERS":0,"EVENTS":0}
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📦 [Exporter] exportSchema called: env=dev, name=users, typeFilter=ALL
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:25:13)
+
+    console.log
+      ✅ [Exporter] Connection found: type=mysql, host=undefined, db=test_db
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:32:13)
+
+    console.log
+      [Exporter] Full connection config: {"database":"test_db"}
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:33:13)
+
+    console.log
+      🔌 [Exporter] Connecting to mysql...
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:37:15)
+
+    console.log
+      ✅ [Exporter] Connected successfully
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:39:15)
+
+    console.log
+      📋 [Exporter] Filter: "undefined" → normalized: "ALL" → types: [TABLE, VIEW, PROCEDURE, FUNCTION, TRIGGER, EVENT]
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:56:15)
+
+    console.log
+      📊 [Exporter] TABLES: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] TABLES: listed=1, saved=1, emptyDDL=0, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📊 [Exporter] VIEWS: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] VIEWS: listed=1, saved=1, emptyDDL=1, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📊 [Exporter] PROCEDURES: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] PROCEDURES: listed=1, saved=1, emptyDDL=1, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📊 [Exporter] FUNCTIONS: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] FUNCTIONS: listed=1, saved=1, emptyDDL=1, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📊 [Exporter] TRIGGERS: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] TRIGGERS: listed=1, saved=1, emptyDDL=1, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📊 [Exporter] EVENTS: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] EVENTS: listed=1, saved=1, emptyDDL=1, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m Exported schema for dev: {"TABLES":1,"VIEWS":1,"PROCEDURES":1,"FUNCTIONS":1,"TRIGGERS":1,"EVENTS":1}
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📦 [Exporter] exportSchema called: env=dev, name=ALL, typeFilter=ALL
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:25:13)
+
+    console.log
+      ✅ [Exporter] Connection found: type=mysql, host=undefined, db=test_db
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:32:13)
+
+    console.log
+      [Exporter] Full connection config: {"database":"test_db"}
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:33:13)
+
+    console.log
+      🔌 [Exporter] Connecting to mysql...
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:37:15)
+
+    console.log
+      ✅ [Exporter] Connected successfully
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:39:15)
+
+    console.log
+      📋 [Exporter] Filter: "undefined" → normalized: "ALL" → types: [TABLE, VIEW, PROCEDURE, FUNCTION, TRIGGER, EVENT]
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:56:15)
+
+    console.log
+      📊 [Exporter] TABLES: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] TABLES: listed=1, saved=1, emptyDDL=0, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📊 [Exporter] VIEWS: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] VIEWS: listed=1, saved=1, emptyDDL=0, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📊 [Exporter] PROCEDURES: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] FUNCTIONS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      📊 [Exporter] TRIGGERS: found 1 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m [Export] TRIGGERS: listed=1, saved=1, emptyDDL=0, errors=0
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      📊 [Exporter] EVENTS: found 0 objects
+
+      at ExporterService.exportSchema (modules/exporter/exporter.service.ts:65:17)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m Exported schema for dev: {"TABLES":1,"VIEWS":1,"PROCEDURES":0,"FUNCTIONS":0,"TRIGGERS":1,"EVENTS":0}
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m 📊 [Exporter] exportTableData: table=users, format=json, env=dev
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m ✅ [Exporter] Exported 2 rows to /tmp/users.json
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m 📊 [Exporter] exportTableData: table=users, format=csv, env=dev
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m ✅ [Exporter] Exported 2 rows to /tmp/users.csv
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m 📊 [Exporter] exportTableData: table=users, format=csv, env=dev
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ ExporterService-INFO >[0m ✅ [Exporter] Exported 0 rows to /tmp/empty.csv
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+PASS src/modules/driver/__tests__/ssh-tunnel.spec.ts
+  ● Console
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ SshTunnel-INFO >[0m SSH Connection Ready. Forwarding to db-host:3306
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [31m 27/03/2026 09:41:33 ❌ SshTunnel-ERROR >[0m SSH Client Error: SSH auth failed
+
+      at AndbLogger.error (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:69:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ SshTunnel-INFO >[0m SSH Connection Ready. Forwarding to db-host:3306
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [31m 27/03/2026 09:41:33 ❌ SshTunnel-ERROR >[0m ForwardOut Error: Port forwarding denied
+
+      at AndbLogger.error (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:69:13)
+
+PASS src/modules/driver/file/__tests__/file.driver.spec.ts
+  ● Console
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ FileDriver-INFO >[0m Connected to File Storage at: /mock/db
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ FileDriver-INFO >[0m Connected to File Storage at: /mock/db
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ FileDriver-INFO >[0m Connected to File Storage at: /mock/db
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ FileDriver-INFO >[0m Connected to File Storage at: /mock/db
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ FileDriver-INFO >[0m Connected to File Storage at: /mock/db
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ FileDriver-INFO >[0m Connected to File Storage at: /mock/db
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+PASS src/modules/driver/dump/__tests__/dump.introspection.spec.ts
+PASS src/modules/parser/parser.service.spec.ts
+PASS src/modules/migrator/migrator.service.spec.ts
+PASS src/modules/comparator/comparator.service.spec.ts
+PASS src/modules/driver/mysql/__tests__/mysql.introspection.spec.ts
+  ● Console
+
+    console.warn
+      [Introspection] TABLE "users": expected column "Create Table" not found. Available keys: [Create View]
+
+      77 |     const key = keys.find(k => k.toLowerCase() === expectedKey.toLowerCase());
+      78 |     if (!key) {
+    > 79 |       console.warn(`[Introspection] ${objectType} "${objectName}": expected column "${expectedKey}" not found. Available keys: [${keys.join(', ')}]`);
+         |               ^
+      80 |       return '';
+      81 |     }
+      82 |     const value = row[key];
+
+      at MysqlIntrospectionService._extractDDLFromRow (modules/driver/mysql/mysql.introspection.ts:79:15)
+      at MysqlIntrospectionService.getTableDDL (modules/driver/mysql/mysql.introspection.ts:95:22)
+      at Object.<anonymous> (modules/driver/mysql/__tests__/mysql.introspection.spec.ts:123:19)
+
+PASS src/modules/driver/dump/__tests__/dump.driver.spec.ts
+  ● Console
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ DumpDriver-INFO >[0m Parsing dump file: test.sql
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ DumpDriver-INFO >[0m Parsed 2 tables from dump.
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ DumpDriver-INFO >[0m Parsing dump file: test.sql
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:33 ℹ️ DumpDriver-INFO >[0m Parsed 0 tables from dump.
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [33m 27/03/2026 09:41:34 ⚠️ DumpDriver-WARN >[0m Query on DumpDriver is not supported: SELECT * FROM users
+
+      at AndbLogger.warn (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:78:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ DumpDriver-INFO >[0m Parsing dump file: /Volumes/FlexibleWorkplace/The-Andb/andb-core/test.sql
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ DumpDriver-INFO >[0m Parsed 1 tables from dump.
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ DumpDriver-INFO >[0m Parsing dump file: test.sql
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ DumpDriver-INFO >[0m Parsed 0 tables from dump.
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+PASS src/modules/driver/mysql/__tests__/mysql.driver.spec.ts
+  ● Console
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ MysqlDriver-INFO >[0m Connected to MySQL at localhost
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ MysqlDriver-INFO >[0m Initializing SSH Tunnel to proxy...
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ MysqlDriver-INFO >[0m Connected to MySQL at localhost (via SSH)
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ MysqlDriver-INFO >[0m Initializing SSH Tunnel to proxy...
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [31m 27/03/2026 09:41:34 ❌ MysqlDriver-ERROR >[0m MySQL Connection Failed: Connect failed
+
+      at AndbLogger.error (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:69:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ MysqlDriver-INFO >[0m Connected to MySQL at localhost
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ MysqlDriver-INFO >[0m Connected to MySQL at localhost
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ MysqlDriver-INFO >[0m Initializing SSH Tunnel to proxy...
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ MysqlDriver-INFO >[0m Connected to MySQL at localhost (via SSH)
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ MysqlDriver-INFO >[0m Connected to MySQL at localhost
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [MysqlDriver] Generated Script:
+       -- Base: Create user and basic metadata access
+      CREATE USER IF NOT EXISTS 'testuser'@'%' IDENTIFIED BY 'password';
+      ALTER USER 'testuser'@'%' IDENTIFIED BY 'password';
+      
+      -- Reset: Remove all existing privileges (supports re-configuration & downgrade)
+      REVOKE ALL PRIVILEGES ON `mydb`.* FROM 'testuser'@'%';
+      
+      -- SELECT, SHOW VIEW, TRIGGER, EVENT: READ permissions
+      GRANT SELECT ON `mydb`.* TO 'testuser'@'%';
+      GRANT SHOW VIEW ON `mydb`.* TO 'testuser'@'%';
+      GRANT TRIGGER ON `mydb`.* TO 'testuser'@'%';
+      GRANT EVENT ON `mydb`.* TO 'testuser'@'%';
+      
+      -- Global READ Permissions (Required for metadata access)
+      -- GRANT SELECT ON mysql.proc: read procedure/function bodies (Legacy/Compatibility)
+      GRANT SELECT ON mysql.proc TO 'testuser'@'%';
+      
+      -- Group: WRITE - DDL Operations
+      GRANT ALTER, CREATE, DROP, INDEX, REFERENCES ON `mydb`.* TO 'testuser'@'%';
+      
+      -- Group: WRITE - View Operations
+      GRANT CREATE VIEW ON `mydb`.* TO 'testuser'@'%';
+      
+      -- Group: WRITE - Routine Operations
+      GRANT ALTER ROUTINE, CREATE ROUTINE, EXECUTE ON `mydb`.* TO 'testuser'@'%';
+      
+      FLUSH PRIVILEGES;
+
+      at MysqlDriver.generateUserSetupScript (modules/driver/mysql/mysql.driver.ts:199:13)
+
+    console.log
+      [MysqlDriver] Generated Script:
+       -- Base: Create user and basic metadata access
+      CREATE USER IF NOT EXISTS 'readonly'@'%' IDENTIFIED BY 'pass';
+      ALTER USER 'readonly'@'%' IDENTIFIED BY 'pass';
+      
+      -- Reset: Remove all existing privileges (supports re-configuration & downgrade)
+      REVOKE ALL PRIVILEGES ON `mydb`.* FROM 'readonly'@'%';
+      
+      -- SELECT, SHOW VIEW, TRIGGER, EVENT: READ permissions
+      GRANT SELECT ON `mydb`.* TO 'readonly'@'%';
+      GRANT SHOW VIEW ON `mydb`.* TO 'readonly'@'%';
+      GRANT TRIGGER ON `mydb`.* TO 'readonly'@'%';
+      GRANT EVENT ON `mydb`.* TO 'readonly'@'%';
+      
+      -- Global READ Permissions (Required for metadata access)
+      -- GRANT SELECT ON mysql.proc: read procedure/function bodies (Legacy/Compatibility)
+      GRANT SELECT ON mysql.proc TO 'readonly'@'%';
+      
+      FLUSH PRIVILEGES;
+
+      at MysqlDriver.generateUserSetupScript (modules/driver/mysql/mysql.driver.ts:199:13)
+
+    console.log
+      [MysqlDriver] Generated Script:
+       -- Base: Create user and basic metadata access
+      CREATE USER IF NOT EXISTS 'userinject'@'hostbad' IDENTIFIED BY 'password';
+      ALTER USER 'userinject'@'hostbad' IDENTIFIED BY 'password';
+      
+      -- Reset: Remove all existing privileges (supports re-configuration & downgrade)
+      REVOKE ALL PRIVILEGES ON `mydb`.* FROM 'userinject'@'hostbad';
+      
+      -- SELECT, SHOW VIEW, TRIGGER, EVENT: READ permissions
+      GRANT SELECT ON `mydb`.* TO 'userinject'@'hostbad';
+      GRANT SHOW VIEW ON `mydb`.* TO 'userinject'@'hostbad';
+      GRANT TRIGGER ON `mydb`.* TO 'userinject'@'hostbad';
+      GRANT EVENT ON `mydb`.* TO 'userinject'@'hostbad';
+      
+      -- Global READ Permissions (Required for metadata access)
+      -- GRANT SELECT ON mysql.proc: read procedure/function bodies (Legacy/Compatibility)
+      GRANT SELECT ON mysql.proc TO 'userinject'@'hostbad';
+      
+      FLUSH PRIVILEGES;
+
+      at MysqlDriver.generateUserSetupScript (modules/driver/mysql/mysql.driver.ts:199:13)
+
+    console.log
+      [MysqlDriver] Generated Script:
+       -- Base: Create user and basic metadata access
+      CREATE USER IF NOT EXISTS 'testuser'@'%' IDENTIFIED BY '';
+      ALTER USER 'testuser'@'%' IDENTIFIED BY '';
+      
+      -- Reset: Remove all existing privileges (supports re-configuration & downgrade)
+      REVOKE ALL PRIVILEGES ON `default`.* FROM 'testuser'@'%';
+      
+      -- SELECT, SHOW VIEW, TRIGGER, EVENT: READ permissions
+      GRANT SELECT ON `default`.* TO 'testuser'@'%';
+      GRANT SHOW VIEW ON `default`.* TO 'testuser'@'%';
+      GRANT TRIGGER ON `default`.* TO 'testuser'@'%';
+      GRANT EVENT ON `default`.* TO 'testuser'@'%';
+      
+      -- Global READ Permissions (Required for metadata access)
+      -- GRANT SELECT ON mysql.proc: read procedure/function bodies (Legacy/Compatibility)
+      GRANT SELECT ON mysql.proc TO 'testuser'@'%';
+      
+      FLUSH PRIVILEGES;
+
+      at MysqlDriver.generateUserSetupScript (modules/driver/mysql/mysql.driver.ts:199:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ MysqlDriver-INFO >[0m Connected to MySQL at localhost
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+    console.log
+      [36m 27/03/2026 09:41:34 ℹ️ MysqlDriver-INFO >[0m Connected to MySQL at localhost
+
+      at AndbLogger.info (../../node_modules/.pnpm/andb-logger@1.0.3/node_modules/andb-logger/service/logger.js:60:13)
+
+
+Test Suites: 1 failed, 12 passed, 13 total
+Tests:       1 failed, 196 passed, 197 total
+Snapshots:   0 total
+Time:        4.785 s, estimated 5 s
+Ran all test suites.
+ ELIFECYCLE  Test failed. See above for more details.
