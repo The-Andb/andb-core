@@ -36,6 +36,10 @@ export class PostgresDriver implements IDatabaseDriver {
       getChecksums: async () => ({}),
       getObjectDDL: async () => "",
       getTableColumns: async () => [],
+      // Table Inspector stubs
+      getTableStats: async () => [],
+      getServerInfo: async () => ({ version: 'postgres', versionMajor: 0, versionMinor: 0, hasInstantDDL: false, hasOnlineDDL: false }),
+      getFKGraph: async () => [],
     };
   }
 

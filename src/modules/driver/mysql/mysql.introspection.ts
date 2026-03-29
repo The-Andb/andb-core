@@ -2,6 +2,7 @@ import {
   IIntrospectionService,
   IDatabaseDriver,
 } from '../../../common/interfaces/driver.interface';
+import { ITableStats, IServerInfo, IFKGraphEntry } from '../../../common/interfaces/schema.interface';
 import { ParserService } from '../../parser/parser.service';
 import { RowDataPacket } from 'mysql2';
 
@@ -310,5 +311,114 @@ export class MysqlIntrospectionService implements IIntrospectionService {
       extra: row.extra,
       comment: row.comment,
     }));
+  }
+
+  // --- Table Inspector (AI DBA Super Mode) ---
+
+  async getTableStats(dbName: string): Promise<ITableStats[]> {
+    try {
+      const results = await this.driver.query<RowDataPacket[]>(
+        `SHOW TABLE STATUS FROM \`${dbName}\``
+      );
+      return results
+        .filter((row: any) => row.Engine !== null) // Skip views (Engine = null)
+        .map((row: any) => ({
+          tableName: row.Name,
+          rowCount: Number(row.Rows) || 0,
+          dataLengthMB: Math.round(((Number(row.Data_length) || 0) / 1024 / 1024) * 100) / 100,
+          indexLengthMB: Math.round(((Number(row.Index_length) || 0) / 1024 / 1024) * 100) / 100,
+          engine: row.Engine || 'unknown',
+          autoIncrement: row.Auto_increment ? Number(row.Auto_increment) : null,
+          collation: row.Collation || '',
+          createTime: row.Create_time ? String(row.Create_time) : null,
+          updateTime: row.Update_time ? String(row.Update_time) : null,
+        }));
+    } catch (err: any) {
+      console.error(`[Introspection] Failed to get table stats for "${dbName}": ${err.message}`);
+      return [];
+    }
+  }
+
+  async getServerInfo(): Promise<IServerInfo> {
+    try {
+      const results = await this.driver.query<RowDataPacket[]>('SELECT VERSION() as version');
+      const versionStr = results[0]?.version || '0.0.0';
+      const parts = versionStr.split('.');
+      const major = parseInt(parts[0]) || 0;
+      const minor = parseInt(parts[1]) || 0;
+      const patch = parseInt(parts[2]) || 0;
+
+      return {
+        version: versionStr,
+        versionMajor: major,
+        versionMinor: minor,
+        // MySQL 8.0.12+ supports INSTANT DDL for ADD COLUMN
+        hasInstantDDL: major > 8 || (major === 8 && minor > 0) || (major === 8 && minor === 0 && patch >= 12),
+        // MySQL 5.6+ supports online DDL (ALGORITHM=INPLACE)
+        hasOnlineDDL: major > 5 || (major === 5 && minor >= 6),
+      };
+    } catch (err: any) {
+      console.error(`[Introspection] Failed to get server info: ${err.message}`);
+      return {
+        version: 'unknown',
+        versionMajor: 0,
+        versionMinor: 0,
+        hasInstantDDL: false,
+        hasOnlineDDL: false,
+      };
+    }
+  }
+
+  async getFKGraph(dbName: string): Promise<IFKGraphEntry[]> {
+    try {
+      const results = await this.driver.query<RowDataPacket[]>(
+        `SELECT 
+          TABLE_NAME as tableName,
+          COLUMN_NAME as columnName,
+          REFERENCED_TABLE_NAME as referencedTable,
+          REFERENCED_COLUMN_NAME as referencedColumn,
+          CONSTRAINT_NAME as constraintName
+        FROM information_schema.KEY_COLUMN_USAGE
+        WHERE TABLE_SCHEMA = ? 
+          AND REFERENCED_TABLE_NAME IS NOT NULL
+        ORDER BY TABLE_NAME, CONSTRAINT_NAME`,
+        [dbName]
+      );
+
+      // Enrich with ON DELETE / ON UPDATE from REFERENTIAL_CONSTRAINTS
+      const refConstraints = await this.driver.query<RowDataPacket[]>(
+        `SELECT 
+          CONSTRAINT_NAME as constraintName,
+          DELETE_RULE as onDelete,
+          UPDATE_RULE as onUpdate
+        FROM information_schema.REFERENTIAL_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = ?`,
+        [dbName]
+      );
+
+      const refMap = new Map<string, { onDelete: string; onUpdate: string }>();
+      for (const rc of refConstraints) {
+        refMap.set((rc as any).constraintName, {
+          onDelete: (rc as any).onDelete || 'RESTRICT',
+          onUpdate: (rc as any).onUpdate || 'RESTRICT',
+        });
+      }
+
+      return results.map((row: any) => {
+        const ref = refMap.get(row.constraintName);
+        return {
+          tableName: row.tableName,
+          columnName: row.columnName,
+          referencedTable: row.referencedTable,
+          referencedColumn: row.referencedColumn,
+          constraintName: row.constraintName,
+          onDelete: ref?.onDelete || 'RESTRICT',
+          onUpdate: ref?.onUpdate || 'RESTRICT',
+        };
+      });
+    } catch (err: any) {
+      console.error(`[Introspection] Failed to get FK graph for "${dbName}": ${err.message}`);
+      return [];
+    }
   }
 }

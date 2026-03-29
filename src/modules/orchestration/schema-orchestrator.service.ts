@@ -494,4 +494,47 @@ export class SchemaOrchestrator {
       await driver.disconnect();
     }
   }
+
+  // --- Table Inspector (AI DBA Super Mode) ---
+
+  async getTableStats(payload: any) {
+    const { connection } = payload;
+    const driver = await this.getDriverFromConnection(connection);
+
+    try {
+      await driver.connect();
+      const intro = driver.getIntrospectionService();
+      const dbName = connection.database || connection.name || 'default';
+      return await intro.getTableStats(dbName);
+    } finally {
+      await driver.disconnect();
+    }
+  }
+
+  async getServerInfo(payload: any) {
+    const { connection } = payload;
+    const driver = await this.getDriverFromConnection(connection);
+
+    try {
+      await driver.connect();
+      const intro = driver.getIntrospectionService();
+      return await intro.getServerInfo();
+    } finally {
+      await driver.disconnect();
+    }
+  }
+
+  async getFKGraph(payload: any) {
+    const { connection } = payload;
+    const driver = await this.getDriverFromConnection(connection);
+
+    try {
+      await driver.connect();
+      const intro = driver.getIntrospectionService();
+      const dbName = connection.database || connection.name || 'default';
+      return await intro.getFKGraph(dbName);
+    } finally {
+      await driver.disconnect();
+    }
+  }
 }

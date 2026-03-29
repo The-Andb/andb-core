@@ -171,3 +171,34 @@ export interface ISemanticReport {
   tables: Record<string, ISemanticObjectDiff>;
   summary: string[]; // High-level human readable strings
 }
+
+// Table Inspector & Meta-Cache (AI DBA Super Mode - Phase 1)
+export interface ITableStats {
+  tableName: string;
+  rowCount: number;
+  dataLengthMB: number;
+  indexLengthMB: number;
+  engine: string;
+  autoIncrement: number | null;
+  collation: string;
+  createTime: string | null;
+  updateTime: string | null;
+}
+
+export interface IServerInfo {
+  version: string;
+  versionMajor: number;
+  versionMinor: number;
+  hasInstantDDL: boolean;   // MySQL 8.0.12+
+  hasOnlineDDL: boolean;    // MySQL 5.6+
+}
+
+export interface IFKGraphEntry {
+  tableName: string;
+  columnName: string;
+  referencedTable: string;
+  referencedColumn: string;
+  constraintName: string;
+  onDelete: string;
+  onUpdate: string;
+}

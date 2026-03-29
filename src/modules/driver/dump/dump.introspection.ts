@@ -70,4 +70,11 @@ export class DumpIntrospectionService implements IIntrospectionService {
   async getTableColumns(db: string, tableName: string): Promise<any[]> {
     return [];
   }
+
+  // Table Inspector stubs (not available for dump-based drivers)
+  async getTableStats(): Promise<any[]> { return []; }
+  async getServerInfo(): Promise<any> {
+    return { version: 'dump', versionMajor: 0, versionMinor: 0, hasInstantDDL: false, hasOnlineDDL: false };
+  }
+  async getFKGraph(): Promise<any[]> { return []; }
 }

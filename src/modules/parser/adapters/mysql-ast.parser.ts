@@ -10,28 +10,45 @@ export class MysqlAstParser implements ISqlAstParser {
   }
 
   private extractDefaultValue(defVal: any): string | null {
-    if (!defVal || !defVal.value) return null;
-    
-    const inner = defVal.value;
-    if (typeof inner === 'string' || typeof inner === 'number' || typeof inner === 'boolean') {
-      return String(inner);
+    if (!defVal || defVal.value === undefined) return null;
+    return this.unwrapAstValue(defVal.value);
+  }
+
+  /**
+   * Recursively unwrap AST node values from node-sql-parser.
+   * Handles: { type: 'null' }, { type: 'single_quote_string', value: '...' },
+   *          { type: 'number', value: 123 }, { type: 'bool', value: true }, etc.
+   */
+  private unwrapAstValue(node: any): string | null {
+    if (node === null || node === undefined) return null;
+    if (typeof node === 'string') return node;
+    if (typeof node === 'number' || typeof node === 'boolean') return String(node);
+
+    if (node && typeof node === 'object' && node.type) {
+      if (node.type === 'null') return 'NULL';
+      if (node.type === 'bool') return node.value ? 'TRUE' : 'FALSE';
+      if (['single_quote_string', 'double_quote_string', 'string'].includes(node.type)) {
+        return node.value != null ? String(node.value) : '';
+      }
+      if (node.type === 'number') return String(node.value);
+      if (node.type === 'function') {
+        const funcName = node.name?.name?.[0]?.value || 'FUNC';
+        return `${funcName}()`;
+      }
+      if (node.type === 'expr_list' || node.type === 'origin') {
+        return node.value != null ? String(node.value) : '';
+      }
+      // Last resort: if value exists, try to unwrap it
+      if (node.value !== undefined) return this.unwrapAstValue(node.value);
     }
-    
-    if (inner && inner.type) {
-      if (inner.type === 'single_quote_string' || inner.type === 'double_quote_string' || inner.type === 'string') {
-        return inner.value;
-      }
-      if (inner.type === 'function') {
-        const funcName = inner.name?.name?.[0]?.value || 'FUNC';
-        return `(${funcName}())`; // Simplified AST to string representation
-      }
-      if (inner.type === 'expr_list' || inner.type === 'origin') {
-         return inner.value;
-      }
-    }
-    
-    // Fallback: JSON stringify if complex
-    return typeof inner === 'object' ? JSON.stringify(inner) : String(inner);
+
+    return null;
+  }
+
+  private extractCommentValue(comment: any): string | undefined {
+    if (!comment) return undefined;
+    const result = this.unwrapAstValue(comment);
+    return result ?? undefined;
   }
 
   parseTableDetailed(ddl: string): ParsedTable | null {
@@ -58,7 +75,7 @@ export class MysqlAstParser implements ISqlAstParser {
             length: def.definition.length,
             nullable: def.nullable ? def.nullable.value !== 'not null' : true,
             defaultValue: this.extractDefaultValue(def.default_val),
-            comment: def.comment ? def.comment.value : undefined,
+            comment: this.extractCommentValue(def.comment),
             autoIncrement: !!def.auto_increment,
             rawDefinition: '' // Omitted because AST abstracts it
           });

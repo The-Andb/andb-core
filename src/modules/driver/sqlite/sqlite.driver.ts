@@ -8,7 +8,7 @@ import {
 import { SqliteIntrospectionService } from './sqlite.introspection';
 import { SqliteMonitoringService } from './sqlite.monitoring';
 import { SqliteMigrator } from '../../migrator/sqlite/sqlite.migrator';
-import * as Database from 'better-sqlite3';
+import Database from 'better-sqlite3';
 const { getLogger } = require('andb-logger');
 import { ParserService } from '../../parser/parser.service';
 import * as path from 'path';

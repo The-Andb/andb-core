@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import * as Database from 'better-sqlite3';
+import Database from 'better-sqlite3';
 
 // SQLite Additions for Dogfooding
 import { SqliteDbDriver } from './modules/driver/sqlite/sqlite.driver';

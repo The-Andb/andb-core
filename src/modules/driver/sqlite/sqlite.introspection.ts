@@ -119,4 +119,11 @@ export class SqliteIntrospectionService implements IIntrospectionService {
       comment: '',
     }));
   }
+
+  // Table Inspector stubs (limited for SQLite)
+  async getTableStats(): Promise<any[]> { return []; }
+  async getServerInfo(): Promise<any> {
+    return { version: 'sqlite', versionMajor: 0, versionMinor: 0, hasInstantDDL: false, hasOnlineDDL: false };
+  }
+  async getFKGraph(): Promise<any[]> { return []; }
 }

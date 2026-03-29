@@ -78,6 +78,13 @@ export class OrchestrationService {
         return await this.getFeaturesStatus();
       case 'getLastMigrationReport':
         return this.migrationReport;
+      // Table Inspector (AI DBA Super Mode)
+      case 'getTableStats':
+        return await this.schemaOrchestrator.getTableStats(payload);
+      case 'getServerInfo':
+        return await this.schemaOrchestrator.getServerInfo(payload);
+      case 'getFKGraph':
+        return await this.schemaOrchestrator.getFKGraph(payload);
       default:
         throw new Error(`Unknown operation: ${operation}`);
     }

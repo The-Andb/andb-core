@@ -1,4 +1,5 @@
 import { ITableDiff, ISchemaDiff, IObjectDiff } from './diff.interface';
+import { ITableStats, IServerInfo, IFKGraphEntry } from './schema.interface';
 
 export interface IDatabaseConfig {
   host?: string;
@@ -97,6 +98,11 @@ export interface IIntrospectionService {
   getChecksums(dbName: string): Promise<Record<string, string>>;
   getObjectDDL(dbName: string, type: string, name: string): Promise<string>;
   getTableColumns(dbName: string, tableName: string): Promise<IColumnMetadata[]>;
+
+  // Table Inspector (AI DBA Super Mode)
+  getTableStats(dbName: string): Promise<ITableStats[]>;
+  getServerInfo(): Promise<IServerInfo>;
+  getFKGraph(dbName: string): Promise<IFKGraphEntry[]>;
 }
 
 export interface IMonitoringService {
