@@ -124,8 +124,8 @@ export class MysqlAstParser implements ISqlAstParser {
         rawSql: ddl
       };
     } catch (err) {
-      // Return null or gracefully fallback if astify fails
-      console.warn('AST parser failed for table, falling back. Error:', (err as Error).message);
+      // Gracefully fallback to regex parser
+      // console.debug('AST parser failed for table, falling back to regex. Error:', (err as Error).message);
       return null;
     }
   }

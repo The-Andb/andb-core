@@ -20,7 +20,7 @@ export class ExporterService {
     envName: string,
     specificName?: string,
     typeFilter?: string,
-    onProgress?: (progress: { type: string; current: number; total: number; objectName: string; state?: string }) => void
+    onProgress?: (progress: { env: string; type: string; current: number; total: number; objectName: string; state?: string }) => void
   ) {
     console.log(`📦 [Exporter] exportSchema called: env=${envName}, name=${specificName || 'ALL'}, typeFilter=${typeFilter || 'ALL'}`);
 
@@ -66,7 +66,7 @@ export class ExporterService {
         summary[pluralType] = list.length;
 
         if (list.length > 0 && onProgress) {
-          onProgress({ type: pluralType, current: 0, total: list.length, objectName: '', state: 'starting_type' });
+          onProgress({ env: envName, type: pluralType, current: 0, total: list.length, objectName: '', state: 'starting_type' });
         }
 
         const exportedNames: string[] = [];
@@ -100,6 +100,7 @@ export class ExporterService {
 
             if (onProgress) {
               onProgress({
+                env: envName,
                 type: pluralType,
                 current: savedCount,
                 total: list.length,

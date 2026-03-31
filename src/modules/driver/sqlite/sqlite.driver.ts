@@ -5,16 +5,21 @@ import {
   IMonitoringService,
   IMigrator,
 } from '../../../common/interfaces/driver.interface';
+import * as BetterSqlite3 from 'better-sqlite3';
+const Database = (BetterSqlite3 as any).default || BetterSqlite3;
+// Use the type directly from the imported namespace
+type BetterSqliteDatabase = BetterSqlite3.Database;
+
+// @ts-ignore
+const { getLogger } = require('andb-logger');
 import { SqliteIntrospectionService } from './sqlite.introspection';
 import { SqliteMonitoringService } from './sqlite.monitoring';
 import { SqliteMigrator } from '../../migrator/sqlite/sqlite.migrator';
-import Database from 'better-sqlite3';
-const { getLogger } = require('andb-logger');
 import { ParserService } from '../../parser/parser.service';
 import * as path from 'path';
 
 export class SqliteDbDriver implements IDatabaseDriver {
-  private db: Database.Database | null = null;
+  private db: BetterSqliteDatabase | null = null;
   private readonly logger = getLogger({ logName: 'SqliteDbDriver' });
 
   private introspectionService?: IIntrospectionService;
@@ -39,7 +44,9 @@ export class SqliteDbDriver implements IDatabaseDriver {
         fileMustExist: false // Create if doesn't exist, mimicking standard SQLite behavior
       });
       // Ensure foreign keys are enforced by default
-      this.db.pragma('foreign_keys = ON');
+      if (this.db) {
+        this.db.pragma('foreign_keys = ON');
+      }
     } catch (err: unknown) {
       const error = err as Error;
       this.logger.error(`SQLite Connection Failed: ${error.message}`);

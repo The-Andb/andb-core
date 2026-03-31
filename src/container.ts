@@ -1,7 +1,8 @@
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import Database from 'better-sqlite3';
+import * as BetterSqlite3 from 'better-sqlite3';
+const Database = (BetterSqlite3 as any).default || BetterSqlite3;
 
 // SQLite Additions for Dogfooding
 import { SqliteDbDriver } from './modules/driver/sqlite/sqlite.driver';

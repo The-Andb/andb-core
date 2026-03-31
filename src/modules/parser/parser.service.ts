@@ -471,7 +471,7 @@ export class ParserService {
           };
        }
     } catch (e) {
-       console.warn('AST Parser failed, falling back to Regex. Error:', (e as Error).message);
+       // console.debug('AST Parser failed, falling back to Regex. Error:', (e as Error).message);
     }
 
     // Fallback to legacy regex implementation
