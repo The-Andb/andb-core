@@ -601,11 +601,14 @@ export class ComparatorService {
    */
   private _applyDomainNormalization(content: string, env?: string): string {
     if (!content) return '';
-    const norm = this.configService.getDomainNormalization(env);
-    if (norm && norm.pattern && norm.pattern instanceof RegExp) {
-      return content.replace(norm.pattern, norm.replacement || '');
+    const norms = this.configService.getDomainNormalization(env);
+    let result = content;
+    for (const norm of norms) {
+      if (norm && norm.pattern && norm.pattern instanceof RegExp) {
+        result = result.replace(norm.pattern, norm.replacement || '');
+      }
     }
-    return content;
+    return result;
   }
 
   private _unescapeHtml(s: string): string {

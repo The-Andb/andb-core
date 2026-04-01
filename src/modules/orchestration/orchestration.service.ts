@@ -106,10 +106,7 @@ export class OrchestrationService {
       );
     }
     if (payload.domainNormalization) {
-      this.configService.setDomainNormalization(
-        new RegExp(payload.domainNormalization.pattern),
-        payload.domainNormalization.replacement,
-      );
+      this.configService.setDomainNormalization(payload.domainNormalization);
     }
   }
 

@@ -118,28 +118,34 @@ export class ProjectConfigService {
     };
   }
 
-  getDomainNormalization(env?: string) {
+  getDomainNormalization(env?: string): { pattern: RegExp, replacement: string }[] {
     const normConfig = this.config.domainNormalization;
-    if (!normConfig) return { pattern: /(?!)/, replacement: '' };
+    if (!normConfig) return [];
 
-    // If environment specific config exists, use it
-    const norm = (env && normConfig[env]) ? normConfig[env] : normConfig;
-
-    if (norm && norm.pattern) {
-      try {
-        const pattern = typeof norm.pattern === 'string'
-          ? new RegExp(norm.pattern, 'g')
-          : norm.pattern;
-        return { pattern, replacement: norm.replacement || '' };
-      } catch (e) {
-        this.logger.error(`Invalid domain normalization pattern: ${norm.pattern}`);
+    // Current standard is an array of rules. 
+    // Handle single rule legacy support for backward compatibility during transitions.
+    const rules = Array.isArray(normConfig) ? normConfig : [normConfig];
+    
+    return rules.map(norm => {
+      if (norm && norm.pattern) {
+        try {
+          const pattern = typeof norm.pattern === 'string'
+            ? new RegExp(norm.pattern, 'g')
+            : norm.pattern;
+          return { pattern, replacement: norm.replacement || '' };
+        } catch (e) {
+          this.logger.error(`Invalid domain normalization pattern: ${norm.pattern}`);
+        }
       }
-    }
-    return { pattern: /(?!)/, replacement: '' };
+      return null;
+    }).filter(r => r !== null) as { pattern: RegExp, replacement: string }[];
+  }
+
+  setAutoBackup(enabled: boolean) {
+    this.config.autoBackup = enabled;
   }
 
   getAutoBackup(): boolean {
-    // Default to false if not specified (safer for CLI/tests)
     if (this.config.autoBackup === undefined) return false;
     return !!this.config.autoBackup;
   }
@@ -149,16 +155,10 @@ export class ProjectConfigService {
       this.config.environments = {};
     }
     this.config.environments[env] = { ...config, type };
-    // We do NOT physically save here because the desktop UI directly calls StorageService now.
-    // This is just a memory fallback if CLI manipulates something live.
   }
 
-  setDomainNormalization(pattern: RegExp, replacement: string) {
-    this.config.domainNormalization = { pattern, replacement };
-  }
-
-  setAutoBackup(enabled: boolean) {
-    this.config.autoBackup = enabled;
+  setDomainNormalization(rules: any | any[]) {
+    this.config.domainNormalization = rules;
   }
 
   getFeatureFlags(): Record<string, boolean> {
