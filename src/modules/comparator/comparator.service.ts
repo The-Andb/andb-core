@@ -93,9 +93,13 @@ export class ComparatorService {
    * Normalize a definition for comparison
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private _normalizeDef(def: string): string {
+  private _normalizeDef(def: string, env?: string): string {
     if (!def) return '';
-    let processed = def.replace(/,$/, '').trim();
+
+    // 0. Apply Domain Normalization (Variables/Schemas/etc)
+    let processed = this._applyNormalization(def, env);
+
+    processed = processed.replace(/,$/, '').trim();
 
     // 1. Normalize Integer Types (MySQL 8.0 ignores display width)
     processed = processed.replace(/(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)\(\d+\)/gi, '$1');
@@ -327,8 +331,8 @@ export class ComparatorService {
       let srcDDL = await src.getTableDDL(srcDbName, tableName);
       let destDDL = await dest.getTableDDL(targetDbName, tableName);
 
-      srcDDL = this._applyDomainNormalization(srcDDL, destEnv);
-      destDDL = this._applyDomainNormalization(destDDL, destEnv);
+      srcDDL = this._applyNormalization(srcDDL, destEnv);
+      destDDL = this._applyNormalization(destDDL, destEnv);
 
       if (!destDDL) {
         // New table - for now handled by Migrator if we just send the diff
@@ -372,8 +376,8 @@ export class ComparatorService {
         let srcDDL = srcList.includes(name) ? await this._getDDL(src, type, srcDbName, name) : '';
         let destDDL = destList.includes(name) ? await this._getDDL(dest, type, targetDbName, name) : '';
 
-        srcDDL = this._applyDomainNormalization(srcDDL, destEnv);
-        destDDL = this._applyDomainNormalization(destDDL, destEnv);
+        srcDDL = this._applyNormalization(srcDDL, destEnv);
+        destDDL = this._applyNormalization(destDDL, destEnv);
 
         const objDiff = this.compareGenericDDL(type, name, srcDDL, destDDL);
         if (objDiff) {
@@ -393,8 +397,8 @@ export class ComparatorService {
       let srcDDL = srcTriggers.includes(name) ? await src.getTriggerDDL(srcDbName, name) : '';
       let destDDL = destTriggers.includes(name) ? await dest.getTriggerDDL(targetDbName, name) : '';
 
-      srcDDL = this._applyDomainNormalization(srcDDL, destEnv);
-      destDDL = this._applyDomainNormalization(destDDL, destEnv);
+      srcDDL = this._applyNormalization(srcDDL, destEnv);
+      destDDL = this._applyNormalization(destDDL, destEnv);
 
       const objDiff = this.compareTriggers(name, srcDDL, destDDL);
       if (objDiff) {
@@ -499,8 +503,8 @@ export class ComparatorService {
       const isOTE = name.startsWith('OTE_') || srcDDL.includes('OTE_') || destDDL.includes('OTE_');
 
       // Apply domain normalization (Rule #1 parity)
-      srcDDL = this._applyDomainNormalization(srcDDL, destEnv);
-      destDDL = this._applyDomainNormalization(destDDL, destEnv);
+      srcDDL = this._applyNormalization(srcDDL, destEnv);
+      destDDL = this._applyNormalization(destDDL, destEnv);
 
       let status: string;
       let alterStatements: string[] = [];
@@ -597,15 +601,17 @@ export class ComparatorService {
 
   /**
    * Apply domain normalization patterns to DDL content.
-   * Legacy: _applyDomainNormalization
+   * Legacy: _applyNormalization
    */
-  private _applyDomainNormalization(content: string, env?: string): string {
+  private _applyNormalization(content: string, env?: string): string {
     if (!content) return '';
     const norms = this.configService.getDomainNormalization(env);
     let result = content;
     for (const norm of norms) {
-      if (norm && norm.pattern && norm.pattern instanceof RegExp) {
-        result = result.replace(norm.pattern, norm.replacement || '');
+      // Use a more robust check than instanceof RegExp for IPC compatibility
+      const pattern = norm?.pattern;
+      if (pattern && (pattern instanceof RegExp || typeof pattern.test === 'function')) {
+        result = result.replace(pattern, norm.replacement || '');
       }
     }
     return result;
@@ -805,10 +811,29 @@ export class ComparatorService {
    * Filter false-positive changes (Legacy parity)
    */
   private _hasRealChange(src: string, dest: string, type: string): boolean {
-    const normSrc = this.parser.normalize(this._unescapeHtml(src), { ignoreDefiner: true, ignoreWhitespace: true }).toLowerCase();
-    const normDest = this.parser.normalize(this._unescapeHtml(dest), { ignoreDefiner: true, ignoreWhitespace: true }).toLowerCase();
+    // Standardize: Remove HTML entities, normalize SQL, remove comments, apply normalization, remove backticks, and lowercase
+    const cleanFn = (text: string) => {
+      let cleaned = this._unescapeHtml(text);
+      cleaned = this.parser.normalize(cleaned, { ignoreDefiner: true, ignoreWhitespace: true });
+      // Aggressive comment removal for environmental parity
+      cleaned = cleaned.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      cleaned = this._applyNormalization(cleaned);
+      // Remove CHARACTER SET and COLLATE to avoid environmental noise
+      cleaned = cleaned.replace(/CHARACTER SET [a-zA-Z0-9_]+/gi, '').replace(/COLLATE [a-zA-Z0-9_]+/gi, '');
+      return cleaned.replace(/[`'"]/g, '').replace(/\s+/g, '').toLowerCase();
+    };
 
-    if (normSrc === normDest) return false;
+    const ns = cleanFn(src);
+    const nd = cleanFn(dest);
+
+    if (ns === nd) return false;
+
+    // DEBUG: Write mismatch to file to see what remains
+    try {
+      const fs = require('fs');
+      const logContent = `--- SRC CLEANED ---\n${ns}\n--- DEST CLEANED ---\n${nd}\n------------------\n`;
+      fs.appendFileSync('/Volumes/FlexibleWorkplace/The-Andb/mismatch.txt', logContent);
+    } catch(e) {}
 
     // For tables, we can do a deeper check via compareTables if needed
     if (type === 'TABLES' || type === 'TABLE') {
