@@ -1,6 +1,6 @@
 {
   "name": "@the-andb/core",
-  "version": "3.3.5",
+  "version": "3.3.6",
   "description": "TheAndb - Keep Going. Keep Syncing.",
   "author": "TheAndb (ph4n4n)",
   "publishConfig": {
@@ -55,6 +55,7 @@
     "playground": "ts-node scripts/playground.ts"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "andb-logger": "^1.0.3",
     "better-sqlite3": "^12.4.6",
     "commander": "^11.1.0",

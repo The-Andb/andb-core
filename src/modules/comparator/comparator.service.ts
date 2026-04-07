@@ -927,7 +927,25 @@ export class ComparatorService {
 
   private isSkipObject(name: string): boolean {
     const skipList = ['information_schema', 'performance_schema', 'mysql', 'sys'];
-    return skipList.includes(name.toLowerCase());
+    const lowerName = name.toLowerCase();
+    
+    if (skipList.includes(lowerName)) return true;
+
+    // Check custom exclusion regex from config
+    const condition = this.configService.getIsNotMigrateCondition();
+    if (condition) {
+      try {
+        const regex = new RegExp(condition, 'i');
+        if (regex.test(name)) {
+          this.logger.info(`Skipping object by custom rule: ${name}`);
+          return true;
+        }
+      } catch (err) {
+        this.logger.error(`Invalid isNotMigrateCondition regex: ${condition}`);
+      }
+    }
+
+    return false;
   }
 }
 import * as fs from 'fs';

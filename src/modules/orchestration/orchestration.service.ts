@@ -21,7 +21,7 @@ export class OrchestrationService {
   public migrationReport: any = null;
 
   async execute(operation: string, payload: any) {
-    this.logger.info(`Executing operation: ${operation}`);
+    this.logger.info(`[v3.3.5-AI-FIX] Executing operation: ${operation}`);
 
     // Ensure config is synced before dispatching
     this.syncConfigWithPayload(payload);
@@ -107,6 +107,9 @@ export class OrchestrationService {
     }
     if (payload.domainNormalization) {
       this.configService.setDomainNormalization(payload.domainNormalization);
+    }
+    if (payload.isNotMigrateCondition) {
+      this.configService.setIsNotMigrateCondition(payload.isNotMigrateCondition);
     }
   }
 

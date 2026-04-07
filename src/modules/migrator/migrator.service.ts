@@ -1,9 +1,13 @@
 import { ITableDiff, ISchemaDiff, IObjectDiff, SafetyLevel, ISafetyReport } from '../../common/interfaces/schema.interface';
 import { IMigrator } from '../../common/interfaces/driver.interface';
 import { ImpactAnalysisService } from '../safety/impact-analysis.service';
+import { ProjectConfigService } from '../config/project-config.service';
 
 export class MigratorService {
-  constructor(private readonly impactAnalysis: ImpactAnalysisService = new ImpactAnalysisService()) { }
+  constructor(
+    private readonly configService: ProjectConfigService,
+    private readonly impactAnalysis: ImpactAnalysisService = new ImpactAnalysisService()
+  ) { }
 
   generateAlterSQL(diff: ITableDiff, migrator: IMigrator): string[] {
     return migrator.generateTableAlterSQL(diff);
@@ -94,7 +98,25 @@ export class MigratorService {
 
   isNotMigrateCondition(name: string): boolean {
     const n = name.toLowerCase();
-    if (n.includes('ote_') || n.startsWith('pt_') || n.includes('test')) return true;
+    
+    // 1. Hardcoded system exclusions (legacy safety)
+    if (n.startsWith('pt_')) return true;
+
+    // 2. Custom exclusions from config
+    const condition = this.configService.getIsNotMigrateCondition();
+    if (condition) {
+      try {
+        const regex = new RegExp(condition, 'i');
+        if (regex.test(name)) return true;
+      } catch (err) {
+        // Fallback to basic match if regex fails
+        if (n.includes('ote_') || n.includes('test')) return true;
+      }
+    } else {
+      // 3. Fallback to default hardcoded logic if no custom condition provided
+      if (n.includes('ote_') || n.includes('test')) return true;
+    }
+
     return false;
   }
 

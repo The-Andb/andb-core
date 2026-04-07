@@ -82,7 +82,7 @@ export class Container {
     this.config = new ProjectConfigService();
     this.parser = new ParserService();
     this.impactAnalysis = new ImpactAnalysisService();
-    this.migrator = new MigratorService(this.impactAnalysis);
+    this.migrator = new MigratorService(this.config, this.impactAnalysis);
     this.reporter = new ReporterService();
 
     // 2. Services with deps

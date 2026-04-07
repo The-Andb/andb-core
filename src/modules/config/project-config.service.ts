@@ -181,6 +181,14 @@ export class ProjectConfigService {
     this.config.FEATURE_FLAGS[key] = enabled;
   }
 
+  setIsNotMigrateCondition(condition: string) {
+    this.config.isNotMigrateCondition = condition;
+  }
+
+  getIsNotMigrateCondition(): string | null {
+    return this.config.isNotMigrateCondition || null;
+  }
+
   saveConfig() {
     this.logger.warn('saveConfig() called dynamically. andb.yaml is no longer supported directly.');
   }
