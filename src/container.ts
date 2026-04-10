@@ -30,6 +30,7 @@ import { SchemaOrchestrator } from './modules/orchestration/schema-orchestrator.
 import { OrchestrationService } from './modules/orchestration/orchestration.service';
 import { featureConfig } from './modules/config/feature.config';
 import { DependencySearchService } from './modules/search/dependency-search.service';
+import { AIService } from './modules/ai/ai.service';
 
 /**
  * Structured report from the dogfooding migration.
@@ -71,6 +72,7 @@ export class Container {
   public readonly impactAnalysis: ImpactAnalysisService;
   public readonly orchestrator: OrchestrationService;
   public readonly dependencySearch: DependencySearchService;
+  public readonly ai: AIService;
 
   // Sub-orchestrators
   public readonly gitOrchestrator: GitOrchestrator;
@@ -92,6 +94,7 @@ export class Container {
     this.exporter = new ExporterService(this.driverFactory, this.config, this.parser, this.storage);
     this.mirror = new SchemaMirrorService(this.storage);
     this.dependencySearch = new DependencySearchService();
+    this.ai = new AIService();
 
     // 3. Orchestrators
     this.gitOrchestrator = new GitOrchestrator(this.mirror);
@@ -117,6 +120,7 @@ export class Container {
       this.gitOrchestrator,
       this.schemaOrchestrator,
       this.parser,
+      this.ai,
     );
   }
 

@@ -5,6 +5,7 @@ import { SecurityOrchestrator } from './security-orchestrator.service';
 import { GitOrchestrator } from './git-orchestrator.service';
 import { SchemaOrchestrator } from './schema-orchestrator.service';
 import { ParserService } from '../parser/parser.service';
+import { AIService } from '../ai/ai.service';
 
 export class OrchestrationService {
   private readonly logger = getLogger({ logName: 'OrchestrationService' });
@@ -16,6 +17,7 @@ export class OrchestrationService {
     public readonly gitOrchestrator: GitOrchestrator,
     public readonly schemaOrchestrator: SchemaOrchestrator,
     public readonly parser: ParserService,
+    public readonly ai: AIService,
   ) { }
 
   public migrationReport: any = null;
@@ -85,6 +87,13 @@ export class OrchestrationService {
         return await this.schemaOrchestrator.getServerInfo(payload);
       case 'getFKGraph':
         return await this.schemaOrchestrator.getFKGraph(payload);
+      // AI DBA Operations
+      case 'ai-configure':
+        return this.ai.configure(payload.apiKey, payload.provider);
+      case 'ai-review':
+        return await this.ai.reviewSchema(payload.context);
+      case 'ai-ask':
+        return await this.ai.askDBA(payload.question, payload.context);
       default:
         throw new Error(`Unknown operation: ${operation}`);
     }
