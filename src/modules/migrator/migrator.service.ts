@@ -66,10 +66,12 @@ export class MigratorService {
   }
 
   /**
-   * Check if a statement is potentially destructive
+   * Check if a statement is potentially destructive (CRITICAL level only).
+   * WARNING-level operations (MODIFY, CHANGE) are standard schema changes
+   * and should not be blocked by the safety guard.
    */
   isDestructive(sql: string): boolean {
-    return this.getSafetyLevel(sql) !== SafetyLevel.SAFE;
+    return this.getSafetyLevel(sql) === SafetyLevel.CRITICAL;
   }
 
   /**
