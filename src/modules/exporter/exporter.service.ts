@@ -41,7 +41,7 @@ export class ExporterService {
       const dbName = connection.config.database || 'default';
 
       const projectBaseDir = this.storageService.getProjectBaseDir ? this.storageService.getProjectBaseDir() : process.cwd();
-      const baseDir = path.join(projectBaseDir, 'db', envName, dbName);
+      const baseDir = path.join(projectBaseDir, 'db', envName, connection.type, dbName);
       this._ensureDir(baseDir);
       this._ensureDir(path.join(baseDir, 'current-ddl'));
 
@@ -95,7 +95,7 @@ export class ExporterService {
             fs.writeFileSync(path.join(dir, `${name}.sql`), ddl || '');
             exportedNames.push(name);
             // Save to storage — always save so it appears in sidebar list
-            await this.storageService.saveDDL(envName, dbName, pluralType, name, ddl || '');
+            await this.storageService.saveDDL(envName, dbName, pluralType, name, ddl || '', connection.type);
             savedCount++;
 
             if (onProgress) {

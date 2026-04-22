@@ -69,6 +69,15 @@ export class CoreBridge {
   public static getOrchestrator() {
     return this.container?.orchestrator;
   }
+  public static getSchemaOrchestrator() {
+    return this.container?.schemaOrchestrator;
+  }
+  public static getSecurityOrchestrator() {
+    return this.container?.securityOrchestrator;
+  }
+  public static getAIOrchestrator() {
+    return this.container?.aiOrchestrator;
+  }
   public static getStorage() {
     return this.container?.storage;
   }

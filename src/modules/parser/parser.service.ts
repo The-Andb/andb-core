@@ -1,13 +1,23 @@
 import { MysqlAstParser } from './adapters/mysql-ast.parser';
+import { PostgresAstParser } from './adapters/postgres-ast.parser';
+import { ISqlAstParser } from './interfaces/sql-ast-parser.interface';
 
 export class ParserService {
-  private astParser = new MysqlAstParser();
+  private mysqlParser = new MysqlAstParser();
+  private postgresParser = new PostgresAstParser();
+
+  getParser(dialect: string = 'mysql'): ISqlAstParser {
+    if (dialect?.toLowerCase() === 'postgres' || dialect?.toLowerCase() === 'postgresql') {
+      return this.postgresParser;
+    }
+    return this.mysqlParser;
+  }
   /**
    * Remove DEFINER clause from DDL
    * Handles CREATE [DEFINER=...] PROCEDURE/FUNCTION/VIEW/TRIGGER/EVENT
    */
   cleanDefiner(ddl: string): string {
-    if (!ddl) return '';
+    if (!ddl || typeof ddl !== 'string') return '';
 
     // Regex components
     const userPart = `(?:'[^']+'|\`[^\`]+\`|"[^"]+"|[a-zA-Z0-9_]+)`;
@@ -60,8 +70,8 @@ export class ParserService {
     ddl: string,
     options: { ignoreDefiner?: boolean; ignoreWhitespace?: boolean } = {},
   ): string {
-    if (!ddl) return '';
-    let processed = ddl;
+    if (!ddl || typeof ddl !== 'string') return '';
+    let processed: any = ddl;
 
     if (options.ignoreDefiner) {
       processed = this.cleanDefiner(processed);
@@ -433,7 +443,7 @@ export class ParserService {
   /**
    * Parse CREATE TABLE statement into rich structured components for UI visualization
    */
-  parseTableDetailed(tableSQL: string): {
+  parseTableDetailed(tableSQL: string, dialect: string = 'mysql'): {
     tableName: string;
     columns: any[];
     indexes: any[];
@@ -443,7 +453,8 @@ export class ParserService {
   } | null {
     try {
        // Attempt AST parsing first
-       const ast = this.astParser.parseTableDetailed(tableSQL);
+       const parser = this.getParser(dialect);
+       const ast = parser.parseTableDetailed(tableSQL);
        if (ast) {
           const pkSet = new Set(ast.indexes.filter((i: any) => i.type === 'PRIMARY').flatMap((i: any) => i.columns));
           const uniqueSet = new Set(ast.indexes.filter((i: any) => i.type === 'UNIQUE').flatMap((i: any) => i.columns));

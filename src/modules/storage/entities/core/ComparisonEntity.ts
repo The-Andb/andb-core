@@ -6,6 +6,7 @@ export class ComparisonEntity {
   @Column('text', { default: '' }) source_env!: string;
   @Column('text', { default: '' }) target_env!: string;
   @Column('text') database_name!: string;
+  @Column('text', { default: 'mysql' }) database_type!: string;
   @Column('text') ddl_type!: string;
   @Column('text') ddl_name!: string;
   @Column('text') status!: string;

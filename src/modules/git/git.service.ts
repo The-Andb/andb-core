@@ -95,15 +95,20 @@ export class GitService {
       // 2. If baseBranch is different from tracking branch, we also want to know drift from base
       // This is important for the "Rebase" warning
       if (targetBase && targetBase !== currentWork) {
-        // Use 'git rev-list --count HEAD..origin/baseBranch' for behind
-        // and 'git rev-list --count origin/baseBranch..HEAD' for ahead
-        const behindRes = await this.git.raw(['rev-list', '--count', `HEAD..origin/${targetBase}`]);
-        const aheadRes = await this.git.raw(['rev-list', '--count', `origin/${targetBase}..HEAD`]);
+        try {
+          // Use 'git rev-list --count HEAD..origin/baseBranch' for behind
+          // and 'git rev-list --count origin/baseBranch..HEAD' for ahead
+          const behindRes = await this.git.raw(['rev-list', '--count', `HEAD..origin/${targetBase}`]);
+          const aheadRes = await this.git.raw(['rev-list', '--count', `origin/${targetBase}..HEAD`]);
 
-        return {
-          ahead: parseInt(aheadRes.trim(), 10) || 0,
-          behind: parseInt(behindRes.trim(), 10) || 0
-        };
+          return {
+            ahead: parseInt(aheadRes.trim(), 10) || 0,
+            behind: parseInt(behindRes.trim(), 10) || 0
+          };
+        } catch (revErr) {
+          // It's expected to fail if the remote branch doesn't exist yet or the repo is empty
+          return { ahead: status.ahead, behind: status.behind };
+        }
       }
 
       return {
@@ -111,7 +116,7 @@ export class GitService {
         behind: status.behind
       };
     } catch (err: any) {
-      this.logger.error(`Failed to check drift: ${err.message}`);
+      this.logger.warn(`Could not check git drift: ${err.message.split('\n')[0]}`);
       return { ahead: 0, behind: 0 };
     }
   }

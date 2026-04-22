@@ -4,47 +4,42 @@ export const schemaTemplateSql = `
 -- Used by the Dogfooding Auto-migration Engine.
 
 CREATE TABLE ddl_exports (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT PRIMARY KEY,
   environment TEXT NOT NULL COLLATE NOCASE,
   database_name TEXT NOT NULL COLLATE NOCASE,
-  ddl_type TEXT NOT NULL COLLATE NOCASE,
-  ddl_name TEXT NOT NULL COLLATE NOCASE,
-  ddl_content TEXT NOT NULL,
+  database_type TEXT DEFAULT 'mysql',
+  export_type TEXT NOT NULL COLLATE NOCASE,
+  export_name TEXT NOT NULL COLLATE NOCASE,
+  ddl_content TEXT,
   checksum TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  exported_to_file INTEGER DEFAULT 0,
   file_path TEXT,
-  UNIQUE(environment, database_name, ddl_type, ddl_name)
+  exported_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(environment, database_name, export_type, export_name, database_type)
 );
 
 CREATE TABLE comparisons (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  src_environment TEXT NOT NULL COLLATE NOCASE,
-  dest_environment TEXT NOT NULL COLLATE NOCASE,
+  id TEXT PRIMARY KEY,
+  source_env TEXT NOT NULL COLLATE NOCASE,
+  target_env TEXT NOT NULL COLLATE NOCASE,
   database_name TEXT NOT NULL COLLATE NOCASE,
+  database_type TEXT DEFAULT 'mysql',
   ddl_type TEXT NOT NULL COLLATE NOCASE,
   ddl_name TEXT NOT NULL COLLATE NOCASE,
   status TEXT NOT NULL,
-  src_ddl_id INTEGER,
-  dest_ddl_id INTEGER,
   diff_summary TEXT,
   alter_statements TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  exported_to_file INTEGER DEFAULT 0,
   file_path TEXT,
-  UNIQUE(src_environment, dest_environment, database_name, ddl_type, ddl_name)
+  compared_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(source_env, target_env, database_name, ddl_type, ddl_name, database_type)
 );
 
 CREATE TABLE migration_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  src_environment TEXT NOT NULL COLLATE NOCASE,
-  dest_environment TEXT NOT NULL COLLATE NOCASE,
+  environment TEXT NOT NULL COLLATE NOCASE,
   database_name TEXT NOT NULL COLLATE NOCASE,
-  ddl_type TEXT NOT NULL COLLATE NOCASE,
-  ddl_name TEXT NOT NULL COLLATE NOCASE,
-  operation TEXT NOT NULL,
+  migration_type TEXT NOT NULL COLLATE NOCASE,
+  target_objects TEXT,
   status TEXT NOT NULL,
   error_message TEXT,
   executed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -52,14 +47,15 @@ CREATE TABLE migration_history (
 );
 
 CREATE TABLE ddl_snapshots (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT PRIMARY KEY,
   environment TEXT NOT NULL COLLATE NOCASE,
   database_name TEXT NOT NULL COLLATE NOCASE,
+  database_type TEXT DEFAULT 'mysql',
   ddl_type TEXT NOT NULL COLLATE NOCASE,
   ddl_name TEXT NOT NULL COLLATE NOCASE,
-  ddl_content TEXT NOT NULL,
-  checksum TEXT,
-  version_tag TEXT,
+  ddl_content TEXT,
+  hash TEXT,
+  file_path TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -117,6 +113,6 @@ CREATE TABLE user_settings (
 );
 
 CREATE INDEX idx_ddl_lookup ON ddl_exports(environment, database_name);
-CREATE INDEX idx_comp_lookup ON comparisons(src_environment, dest_environment);
+CREATE INDEX idx_comp_lookup ON comparisons(source_env, target_env);
 CREATE INDEX idx_snapshot_lookup ON ddl_snapshots(environment, database_name, ddl_type, ddl_name);
 `;

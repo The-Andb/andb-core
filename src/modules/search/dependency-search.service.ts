@@ -104,9 +104,10 @@ export class DependencySearchService {
     database: string,
     query: string,
     flags: { caseSensitive: boolean; wholeWord: boolean; regex: boolean },
+    databaseType: string = 'mysql'
   ): Promise<IDependencyMatch[]> {
     const results: IDependencyMatch[] = [];
-    const rows = await storage.searchDDL(environment, database, query, flags);
+    const rows = await storage.searchDDL(environment, database, query, flags, databaseType);
 
     let searchRegex: RegExp;
     try {

@@ -80,11 +80,12 @@ export class StorageService {
 
   // --- DDL Exports ---
 
-  async saveDdlExport(environment: string, databaseName: string, exportType: string, exportName: string, ddlContent: string) {
+  async saveDdlExport(environment: string, databaseName: string, exportType: string, exportName: string, ddlContent: string, databaseType: string = 'mysql') {
     return this.ensureStrategy().saveDdlExport({
-      id: `${environment}_${databaseName}_${exportType}_${exportName}`.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase(),
+      id: `${environment}_${databaseType}_${databaseName}_${exportType}_${exportName}`.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase(),
       environment,
       database_name: databaseName,
+      database_type: databaseType,
       export_type: exportType,
       export_name: exportName,
       ddl_content: ddlContent
@@ -92,21 +93,21 @@ export class StorageService {
   }
 
   // Alias for backward compatibility with ExporterService
-  async saveDDL(environment: string, databaseName: string, exportType: string, exportName: string, ddlContent: string) {
-    return this.saveDdlExport(environment, databaseName, exportType, exportName, ddlContent);
+  async saveDDL(environment: string, databaseName: string, exportType: string, exportName: string, ddlContent: string, databaseType: string = 'mysql') {
+    return this.saveDdlExport(environment, databaseName, exportType, exportName, ddlContent, databaseType);
   }
 
   async deleteDDL(environment: string, databaseName: string, exportType: string, exportName: string) {
     return this.ensureStrategy().deleteDdlExport(environment, databaseName, exportType, exportName);
   }
 
-  async getDDL(environment: string, database: string, type: string, name: string) {
+  async getDDL(environment: string, database: string, type: string, name: string, databaseType: string = 'mysql') {
     const rows = await this.ensureStrategy().getDdlExports(environment, database, type, 1);
     const row = rows.find(r => r.export_name === name);
     return row ? row.ddl_content : null;
   }
-  async getDDLObjects(environment: string, database: string, type: string) {
-    const rows = await this.ensureStrategy().getDdlExports(environment, database, type);
+  async getDDLObjects(environment: string, database: string, type: string, databaseType: string = 'mysql') {
+    const rows = await this.ensureStrategy().getDdlExports(environment, database, type, undefined);
     return rows.map((r: any) => ({
       name: r.export_name,
       content: r.ddl_content,
@@ -114,17 +115,17 @@ export class StorageService {
     }));
   }
 
-  async searchDDL(environment: string, database: string, query: string, flags: { caseSensitive: boolean; wholeWord: boolean; regex: boolean }) {
+  async searchDDL(environment: string, database: string, query: string, flags: { caseSensitive: boolean; wholeWord: boolean; regex: boolean }, databaseType: string = 'mysql') {
     // Keep raw query for search to preserve logic if necessary, or let strategy handle it.
     // For now, fallback to raw query.
     let sql = `
       SELECT export_type as type, export_name as name, ddl_content as content, exported_at as updated_at
       FROM ddl_exports
-      WHERE environment = ? AND database_name = ?
+      WHERE environment = ? AND database_name = ? AND database_type = ?
       AND (export_name LIKE ? OR ddl_content LIKE ?)
     `;
     const likeQuery = `%${query}%`;
-    let rows = await this.ensureStrategy().queryRaw(sql, [environment, database, likeQuery, likeQuery]);
+    let rows = await this.ensureStrategy().queryRaw(sql, [environment, database, databaseType, likeQuery, likeQuery]);
     // Simplistic return, omitting RegExp filter for brevity.
     return rows;
   }
@@ -134,18 +135,25 @@ export class StorageService {
     return rows.map((r: any) => r.environment);
   }
 
-  async getDatabases(environment: string) {
-    const rows = await this.ensureStrategy().queryRaw('SELECT DISTINCT database_name as name FROM ddl_exports WHERE environment = ? ORDER BY database_name ASC', [environment]);
-    return rows.map((r: any) => r.name);
+  async getDatabases(environment: string, databaseType?: string) {
+    let sql = 'SELECT DISTINCT database_name as name, database_type FROM ddl_exports WHERE environment = ?';
+    const params = [environment];
+    if (databaseType) {
+      sql += ' AND database_type = ?';
+      params.push(databaseType);
+    }
+    sql += ' ORDER BY database_name ASC';
+    return await this.ensureStrategy().queryRaw(sql, params);
   }
 
   // --- Snapshots ---
 
-  async saveSnapshot(environment: string, databaseName: string, ddlType: string, ddlName: string, ddlContent: string, hash: string) {
+  async saveSnapshot(environment: string, databaseName: string, ddlType: string, ddlName: string, ddlContent: string, hash: string, databaseType: string = 'mysql') {
     return this.ensureStrategy().saveSnapshot({
-      id: `${environment}_${databaseName}_${ddlType}_${ddlName}_${hash}`.replace(/[^a-zA-Z0-9_]/g, ''),
+      id: `${environment}_${databaseType}_${databaseName}_${ddlType}_${ddlName}_${hash}`.replace(/[^a-zA-Z0-9_]/g, ''),
       environment,
       database_name: databaseName,
+      database_type: databaseType,
       ddl_type: ddlType,
       ddl_name: ddlName,
       ddl_content: ddlContent,
@@ -171,6 +179,7 @@ export class StorageService {
   async saveComparison(sourceEnv: any, targetEnv?: string, databaseName?: string, ddlType?: string, ddlName?: string, status?: string, alterStatements?: any) {
     let src, dest, db, type, name, stat, alters;
 
+    let dbType = 'mysql';
     if (typeof sourceEnv === 'object' && sourceEnv !== null) {
       const payload = sourceEnv;
       src = payload.srcEnv ?? payload.sourceEnv ?? payload.source_env ?? '';
@@ -180,6 +189,7 @@ export class StorageService {
       name = payload.name ?? payload.ddlName ?? payload.ddl_name ?? '';
       stat = payload.status ?? '';
       alters = payload.alterStatements ?? payload.alter_statements ?? '';
+      dbType = payload.databaseType ?? payload.database_type ?? payload.dbType ?? 'mysql';
     } else {
       src = sourceEnv ?? '';
       dest = targetEnv ?? '';
@@ -192,10 +202,11 @@ export class StorageService {
 
     const processedAlters = Array.isArray(alters) ? JSON.stringify(alters) : alters;
     return this.ensureStrategy().saveComparison({
-      id: `${src}_${dest}_${db}_${type}_${name}`.replace(/[^a-zA-Z0-9_]/g, ''),
+      id: `${src}_${dest}_${dbType}_${db}_${type}_${name}`.replace(/[^a-zA-Z0-9_]/g, ''),
       source_env: src,
       target_env: dest,
       database_name: db,
+      database_type: dbType,
       ddl_type: type,
       ddl_name: name,
       status: stat,
@@ -311,11 +322,11 @@ export class StorageService {
   }
 
   // Cleanup ops if necessary
-  async clearConnectionData(env: string, database: string) {
+  async clearConnectionData(env: string, database: string, databaseType: string = 'mysql') {
     try {
-      await this.strategy?.executeRaw('DELETE FROM ddl_exports WHERE environment = ? AND database_name = ?', [env, database]);
-      await this.strategy?.executeRaw('DELETE FROM ddl_snapshots WHERE environment = ? AND database_name = ?', [env, database]);
-      await this.strategy?.executeRaw('DELETE FROM comparisons WHERE database_name = ? AND (source_env = ? OR target_env = ?)', [database, env, env]);
+      await this.strategy?.executeRaw('DELETE FROM ddl_exports WHERE environment = ? AND database_name = ? AND database_type = ?', [env, database, databaseType]);
+      await this.strategy?.executeRaw('DELETE FROM ddl_snapshots WHERE environment = ? AND database_name = ? AND database_type = ?', [env, database, databaseType]);
+      await this.strategy?.executeRaw('DELETE FROM comparisons WHERE database_name = ? AND database_type = ? AND (source_env = ? OR target_env = ?)', [database, databaseType, env, env]);
     } catch (e) {
       this.logger.error(`clearConnectionData failed: ${e}`);
     }

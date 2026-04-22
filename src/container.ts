@@ -30,6 +30,10 @@ import { SchemaOrchestrator } from './modules/orchestration/schema-orchestrator.
 import { OrchestrationService } from './modules/orchestration/orchestration.service';
 import { featureConfig } from './modules/config/feature.config';
 import { DependencySearchService } from './modules/search/dependency-search.service';
+import { VaultMigrationService } from './modules/storage/migration/vault-migration.service';
+import { AIService } from './modules/orchestration/ai.service';
+import { AIOrchestrator } from './modules/orchestration/ai-orchestrator.service';
+import { KnowledgeService } from './modules/knowledge/knowledge.service';
 
 /**
  * Structured report from the dogfooding migration.
@@ -71,6 +75,9 @@ export class Container {
   public readonly impactAnalysis: ImpactAnalysisService;
   public readonly orchestrator: OrchestrationService;
   public readonly dependencySearch: DependencySearchService;
+  public readonly aiService: AIService;
+  public readonly aiOrchestrator: AIOrchestrator;
+  public readonly knowledge?: KnowledgeService;
 
   // Sub-orchestrators
   public readonly gitOrchestrator: GitOrchestrator;
@@ -92,7 +99,6 @@ export class Container {
     this.exporter = new ExporterService(this.driverFactory, this.config, this.parser, this.storage);
     this.mirror = new SchemaMirrorService(this.storage);
     this.dependencySearch = new DependencySearchService();
-
     // 3. Orchestrators
     this.gitOrchestrator = new GitOrchestrator(this.mirror);
     this.securityOrchestrator = new SecurityOrchestrator(this.config, this.driverFactory);
@@ -109,7 +115,19 @@ export class Container {
       this.parser,
     );
 
-    // 4. Root orchestrator
+    // 4. AI Services (Needs schemaOrchestrator)
+    this.aiService = new AIService();
+    this.aiOrchestrator = new AIOrchestrator(
+      this.aiService,
+      this.config,
+      this.schemaOrchestrator,
+      this.storage
+    );
+
+    // Patch AIOrchestrator's schemaOrchestrator since it was created earlier
+    (this.aiOrchestrator as any).schemaOrchestrator = this.schemaOrchestrator;
+
+    // 5. Root orchestrator
     this.orchestrator = new OrchestrationService(
       this.config,
       featureConfig,
@@ -117,6 +135,7 @@ export class Container {
       this.gitOrchestrator,
       this.schemaOrchestrator,
       this.parser,
+      this.aiOrchestrator,
     );
   }
 
@@ -129,6 +148,18 @@ export class Container {
     }
     const finalDbPath = dbPath;
     await this.storage.initialize(strategy, finalDbPath, projectBaseDir);
+
+    // Rehydrate AI settings from persistent store
+    await (this.aiOrchestrator as any).rehydrate();
+
+    // Initialize Knowledge Base
+    if (projectBaseDir) {
+      const docsPath = path.join(projectBaseDir, 'docs');
+      (this as any).knowledge = new KnowledgeService(docsPath);
+      await this.knowledge?.load();
+      // Inject knowledge into AIOrchestrator
+      (this.aiOrchestrator as any).knowledgeService = this.knowledge;
+    }
 
     try {
       this.lastMigrationReport = await this.runDogfoodMigration(finalDbPath);
@@ -143,6 +174,12 @@ export class Container {
 
     // Rehydrate synchronous accessors for CLI configurations
     await this.config.init(this.storage);
+
+    // Relocate legacy vault data to engine-isolated folders
+    if (projectBaseDir) {
+      const vaultMigration = new VaultMigrationService(this.config, projectBaseDir);
+      await vaultMigration.migrate();
+    }
   }
 
   private async runDogfoodMigration(targetDbPath: string): Promise<MigrationReport | null> {
@@ -153,7 +190,7 @@ export class Container {
     // 2. Wrap them in SqliteDbDrivers to use Introspection Services
     const srcDriver = new SqliteDbDriver({ host: ':memory:' });
     // Hack: manually set db connection for the memory db so it doesn't try to open disk file again
-    (srcDriver as any).db = memDb; 
+    (srcDriver as any).db = memDb;
     const destDriver = new SqliteDbDriver({ host: targetDbPath });
 
     await destDriver.connect();
@@ -169,45 +206,45 @@ export class Container {
 
     // 3. Diff Expected vs Actual
     for (const table of expectedTables) {
-       const srcDdl = await srcIntro.getTableDDL('default', table);
-       if (!actualTables.includes(table)) {
-         // Missing entirely -> Execute CREATE statement verbatim
-         console.log(`[Dogfooding] Creating missing table: ${table}`);
-         await destDriver.query(srcDdl);
+      const srcDdl = await srcIntro.getTableDDL('default', table);
+      if (!actualTables.includes(table)) {
+        // Missing entirely -> Execute CREATE statement verbatim
+        console.log(`[Dogfooding] Creating missing table: ${table}`);
+        await destDriver.query(srcDdl);
 
-         // Extract column names for the report
-         const colNames = this.extractColumnNames(srcDdl);
-         changes.push({
-           action: 'CREATED',
-           table,
-           details: colNames.length > 0
-             ? [`New table with ${colNames.length} columns: ${colNames.join(', ')}`]
-             : ['New table created']
-         });
-       } else {
-         // Existing table -> AST Diff via ComparatorService
-         const destDdl = await destIntro.getTableDDL('default', table);
-         const diff = this.comparator.compareTables(srcDdl, destDdl);
-         if (diff.hasChanges) {
-           console.log(`[Dogfooding] Migrating table: ${table}`);
-           const stmts = migrator.generateTableAlterSQL(diff);
-           const details: string[] = [];
-           for (const sql of stmts) {
-             if (sql.startsWith('-- WARNING')) {
-               console.warn(`[Dogfooding] ${sql}`);
-               details.push(sql.replace('-- WARNING: ', '⚠️ '));
-             } else {
-               await destDriver.query(sql);
-               details.push(this.humanizeAlterSQL(sql));
-             }
-           }
-           changes.push({ action: 'MODIFIED', table, details });
-         }
-       }
+        // Extract column names for the report
+        const colNames = this.extractColumnNames(srcDdl);
+        changes.push({
+          action: 'CREATED',
+          table,
+          details: colNames.length > 0
+            ? [`New table with ${colNames.length} columns: ${colNames.join(', ')}`]
+            : ['New table created']
+        });
+      } else {
+        // Existing table -> AST Diff via ComparatorService
+        const destDdl = await destIntro.getTableDDL('default', table);
+        const diff = this.comparator.compareTables(srcDdl, destDdl, 'sqlite', 'sqlite');
+        if (diff.hasChanges) {
+          console.log(`[Dogfooding] Migrating table: ${table}`);
+          const stmts = migrator.generateTableAlterSQL(diff);
+          const details: string[] = [];
+          for (const sql of stmts) {
+            if (sql.startsWith('-- WARNING')) {
+              console.warn(`[Dogfooding] ${sql}`);
+              details.push(sql.replace('-- WARNING: ', '⚠️ '));
+            } else {
+              await destDriver.query(sql);
+              details.push(this.humanizeAlterSQL(sql));
+            }
+          }
+          changes.push({ action: 'MODIFIED', table, details });
+        }
+      }
     }
 
     if (changes.length > 0) {
-       console.log(`[Dogfooding] Core database migrated: ${changes.length} table(s) affected.`);
+      console.log(`[Dogfooding] Core database migrated: ${changes.length} table(s) affected.`);
     }
 
     await destDriver.disconnect();
@@ -233,7 +270,7 @@ export class Container {
       const trimmed = line.trim();
       // Skip constraints (PRIMARY KEY, UNIQUE, FOREIGN KEY, CHECK)
       if (/^(PRIMARY|UNIQUE|FOREIGN|CHECK|CONSTRAINT)/i.test(trimmed)) continue;
-      const colMatch = trimmed.match(/^[`"']?(\w+)[`"']?/); 
+      const colMatch = trimmed.match(/^[`"']?(\w+)[`"']?/);
       if (colMatch) columns.push(colMatch[1]);
     }
     return columns;

@@ -53,7 +53,34 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
     });
 
     await this.dataSource.initialize();
+    await this.healMalformedColumns();
     await this.runDataMigrations();
+  }
+
+  private async healMalformedColumns(): Promise<void> {
+    if (!this.dataSource) return;
+    try {
+      // Check if the dreaded '[object Object]' column exists in ddl_exports
+      const tableInfo = await this.dataSource.query("PRAGMA table_info(ddl_exports)");
+      const hasBadCol = tableInfo.some((col: any) => col.name === '[object Object]' || col.name === 'object Object');
+      
+      if (hasBadCol) {
+        console.warn('⚠️ [Healing] Malformed column detected in ddl_exports. Attempting to repair table...');
+        // SQLite doesn't support DROP COLUMN on older versions (pre 3.35), 
+        // but Since better-sqlite3 usually uses modern SQLite, we can try.
+        // If not, we'd need to recreate the table. Let's try the modern way first.
+        try {
+          await this.dataSource.query('ALTER TABLE "ddl_exports" DROP COLUMN "[object Object]"');
+        } catch (e) {
+          try {
+            await this.dataSource.query('ALTER TABLE "ddl_exports" DROP COLUMN "object Object"');
+          } catch (e2) {}
+        }
+        console.log('✅ [Healing] Table ddl_exports repaired.');
+      }
+    } catch (e: any) {
+      console.error('[Healing] Failed to repair table:', e.message);
+    }
   }
 
   protected async runDataMigrations(): Promise<void> {
@@ -116,10 +143,102 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
            OR database_name IS NULL OR database_name = ''
       `);
 
+      // Vault Database Type Isolation Migration
+      await this.migrateLegacyVaultStructure();
+
     } catch (e: any) {
       console.error('[BaseStorageStrategy] Data Migration Failed:', e.message);
     }
   }
+
+  /**
+   * Data Migration: Vault Database Type Isolation
+   * Relocates legacy "flat" storage to engine-specific subfolders.
+   */
+  private async migrateLegacyVaultStructure(): Promise<void> {
+    if (!this.dataSource) return;
+
+    // 1. Backfill NULL/empty database_type for existing records (default to 'mysql')
+    await this.dataSource.query("UPDATE ddl_exports SET database_type = 'mysql' WHERE database_type IS NULL OR database_type = ''");
+    await this.dataSource.query("UPDATE ddl_snapshots SET database_type = 'mysql' WHERE database_type IS NULL OR database_type = ''");
+    await this.dataSource.query("UPDATE comparisons SET database_type = 'mysql' WHERE database_type IS NULL OR database_type = ''");
+
+    // 2. Relocate DDL Exports
+    const exports = await this.ds.getRepository(DdlExportEntity).find();
+    for (const r of exports) {
+      const dbType = (r.database_type || 'mysql').toLowerCase();
+      // Only relocate if path exists and doesn't already contain the engine subfolder
+      if (r.file_path && !r.file_path.includes(`/${dbType}/`)) {
+        const oldPath = path.join(this.projectBaseDir, r.file_path);
+        const extType = (r.export_type || 'unknown').toLowerCase();
+        const newRelPath = `db/${r.environment}/${dbType}/${r.database_name}/${extType}/${r.export_name}.sql`;
+        const newPath = path.join(this.projectBaseDir, newRelPath);
+
+        if (fs.existsSync(oldPath)) {
+          console.log(`[Migration] Relocating DDL export: ${r.file_path} -> ${newRelPath}`);
+          const newDir = path.dirname(newPath);
+          if (!fs.existsSync(newDir)) fs.mkdirSync(newDir, { recursive: true });
+          fs.renameSync(oldPath, newPath);
+          r.file_path = newRelPath;
+          await this.ds.getRepository(DdlExportEntity).save(r);
+        }
+      }
+    }
+
+    // 3. Relocate Snapshots
+    const snapshots = await this.ds.getRepository(DdlSnapshotEntity).find();
+    for (const r of snapshots) {
+      const dbType = (r.database_type || 'mysql').toLowerCase();
+      if (r.file_path && !r.file_path.includes(`/${dbType}/`)) {
+        const oldPath = path.join(this.projectBaseDir, r.file_path);
+        const extType = (r.ddl_type || 'unknown').toLowerCase();
+        const newRelPath = `db/${r.environment}/${dbType}/${r.database_name}/.snapshots/${extType}/${r.ddl_name}.sql`;
+        const newPath = path.join(this.projectBaseDir, newRelPath);
+
+        if (fs.existsSync(oldPath)) {
+          console.log(`[Migration] Relocating Snapshot: ${r.file_path} -> ${newRelPath}`);
+          const newDir = path.dirname(newPath);
+          if (!fs.existsSync(newDir)) fs.mkdirSync(newDir, { recursive: true });
+          fs.renameSync(oldPath, newPath);
+          r.file_path = newRelPath;
+          await this.ds.getRepository(DdlSnapshotEntity).save(r);
+        }
+      }
+    }
+
+    // 4. Relocate Comparisons
+    const comparisons = await this.ds.getRepository(ComparisonEntity).find();
+    for (const r of comparisons) {
+      const dbType = (r.database_type || 'mysql').toLowerCase();
+      if (r.file_path && r.file_path.includes('map-migrate') && !r.file_path.includes(`/${dbType}/`)) {
+        // file_path for comparisons is often a directory: map-migrate/src-to-dest/db_name/tables/alters
+        // We want: map-migrate/src-to-dest/db_type/db_name/tables/alters
+        const oldPath = path.join(this.projectBaseDir, r.file_path);
+        const parts = r.file_path.split('/');
+        // parts: [map-migrate, src-to-dest, db_name, type, alters]
+        // or: [map-migrate, src-to-dest, db_name, type, alters, columns, name.sql] (less likely in DB)
+        
+        // Find the environment transition part (e.g. DEV-to-PROD)
+        const transitionIdx = parts.findIndex(p => p.includes('-to-'));
+        if (transitionIdx !== -1) {
+          const newParts = [...parts];
+          newParts.splice(transitionIdx + 1, 0, dbType);
+          const newRelPath = newParts.join('/');
+          const newPath = path.join(this.projectBaseDir, newRelPath);
+
+          if (fs.existsSync(oldPath)) {
+            console.log(`[Migration] Relocating Comparison directory: ${r.file_path} -> ${newRelPath}`);
+            const newParent = path.dirname(newPath);
+            if (!fs.existsSync(newParent)) fs.mkdirSync(newParent, { recursive: true });
+            fs.renameSync(oldPath, newPath);
+            r.file_path = newRelPath;
+            await this.ds.getRepository(ComparisonEntity).save(r);
+          }
+        }
+      }
+    }
+  }
+
 
   async close(): Promise<void> {
     if (this.dataSource && this.dataSource.isInitialized) {
@@ -223,7 +342,8 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
   // --- Exports ---
   async saveDdlExport(exportData: DdlExport): Promise<void> {
     const extType = (exportData.export_type || 'unknown').toLowerCase();
-    const relPath = `db/${exportData.environment}/${exportData.database_name}/${extType}/${exportData.export_name}.sql`;
+    const dbType = (exportData.database_type || 'mysql').toLowerCase();
+    const relPath = `db/${exportData.environment}/${dbType}/${exportData.database_name}/${extType}/${exportData.export_name}.sql`;
 
     if (exportData.ddl_content) {
       this._writeSqlFile(relPath, exportData.ddl_content);
@@ -234,9 +354,11 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
     await this.ds.getRepository(DdlExportEntity).save({ ...exportData, updated_at: new Date() } as any);
   }
 
-  async getDdlExports(env: string, dbName: string, type?: string, limit?: number): Promise<DdlExport[]> {
+  async getDdlExports(env: string, dbName: string, type?: string, limit?: number, databaseType?: string): Promise<DdlExport[]> {
     const where: any = { environment: env, database_name: dbName };
     if (type) where.export_type = type;
+    if (databaseType) where.database_type = databaseType;
+    
     const query = this.ds.getRepository(DdlExportEntity).createQueryBuilder('e')
       .where(where)
       .orderBy('e.exported_at', 'DESC');
@@ -253,19 +375,21 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
     return results;
   }
 
-  async deleteDdlExport(env: string, dbName: string, type: string, name: string): Promise<void> {
+  async deleteDdlExport(env: string, dbName: string, type: string, name: string, databaseType: string = 'mysql'): Promise<void> {
     await this.ds.getRepository(DdlExportEntity).delete({
       environment: env,
       database_name: dbName,
       export_type: type,
-      export_name: name
+      export_name: name,
+      database_type: databaseType
     });
   }
 
   // --- Snapshots ---
   async saveSnapshot(snapshot: DdlSnapshot): Promise<void> {
     const extType = (snapshot.ddl_type || 'unknown').toLowerCase();
-    const relPath = `db/${snapshot.environment}/${snapshot.database_name}/.snapshots/${extType}/${snapshot.ddl_name}.sql`;
+    const dbType = (snapshot.database_type || 'mysql').toLowerCase();
+    const relPath = `db/${snapshot.environment}/${dbType}/${snapshot.database_name}/.snapshots/${extType}/${snapshot.ddl_name}.sql`;
 
     if (snapshot.ddl_content) {
       this._writeSqlFile(relPath, snapshot.ddl_content);
@@ -275,9 +399,9 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
     await this.ds.getRepository(DdlSnapshotEntity).save({ ...snapshot, created_at: new Date() } as any);
   }
 
-  async getSnapshot(env: string, dbName: string, type: string, name: string): Promise<DdlSnapshot | null> {
+  async getSnapshot(env: string, dbName: string, type: string, name: string, databaseType: string = 'mysql'): Promise<DdlSnapshot | null> {
     const snap = await this.ds.getRepository(DdlSnapshotEntity).findOne({
-      where: { environment: env, database_name: dbName, ddl_type: type, ddl_name: name },
+      where: { environment: env, database_name: dbName, ddl_type: type, ddl_name: name, database_type: databaseType },
       order: { created_at: 'DESC' }
     });
     if (snap && (snap as any).file_path) {
@@ -304,6 +428,7 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
   // --- Comparisons ---
   async saveComparison(comparison: ComparisonResult): Promise<void> {
     const extType = (comparison.ddl_type || 'unknown').toLowerCase();
+    const dbType = (comparison.database_type || 'mysql').toLowerCase();
 
     let stmts: string[] = [];
     if (comparison.alter_statements) {
@@ -348,7 +473,7 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
 
       console.log(`[StorageStrategy] Extracted alters - col: ${colAlters.length}, idx: ${idxAlters.length}, rmvCol: ${rmvColAlters.length}`);
 
-      const basePath = `map-migrate/${comparison.source_env}-to-${comparison.target_env}/${comparison.database_name}/${extType}/alters`;
+      const basePath = `map-migrate/${comparison.source_env}-to-${comparison.target_env}/${dbType}/${comparison.database_name}/${extType}/alters`;
 
       if (extType === 'tables') {
         if (colAlters.length > 0) {
@@ -404,8 +529,8 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
     }
   }
 
-  async getComparisons(srcEnv: string, destEnv: string, dbName: string, type?: string): Promise<ComparisonResult[]> {
-    const where: any = { source_env: srcEnv, target_env: destEnv, database_name: dbName };
+  async getComparisons(srcEnv: string, destEnv: string, dbName: string, type?: string, databaseType: string = 'mysql'): Promise<ComparisonResult[]> {
+    const where: any = { source_env: srcEnv, target_env: destEnv, database_name: dbName, database_type: databaseType };
     if (type && type !== 'ALL') where.ddl_type = type;
     const results = await this.ds.getRepository(ComparisonEntity).find({
       where,

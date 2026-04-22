@@ -1,5 +1,6 @@
 const { getLogger } = require('andb-logger');
 import { ParserService } from '../parser/parser.service';
+import { SemanticMapper } from './utils/semantic-mapper';
 import {
   IDiffOperation,
   ITableDiff,
@@ -24,9 +25,9 @@ export class ComparatorService {
   /**
    * Compare two CREATE TABLE statements and return differences
    */
-  compareTables(srcDDL: string, destDDL: string): ITableDiff {
-    const srcTable = this.parser.parseTable(srcDDL);
-    const destTable = this.parser.parseTable(destDDL);
+  compareTables(srcDDL: string, destDDL: string, srcDialect: string = 'mysql', destDialect: string = 'mysql'): ITableDiff {
+    const srcTable = this.parser.parseTableDetailed(srcDDL, srcDialect);
+    const destTable = this.parser.parseTableDetailed(destDDL, destDialect);
 
     // Fallback if parsing fails: do literal comparison
     if (!srcTable || !destTable) {
@@ -43,7 +44,7 @@ export class ComparatorService {
     const operations: IDiffOperation[] = [];
 
     // 1. Compare Columns
-    const { alterColumns, missingColumns } = this.compareColumns(srcTable, destTable);
+    const { alterColumns, missingColumns } = this.compareColumns(srcTable, destTable, srcDialect, destDialect);
 
     // Convert logic results to IDiffOperations
     alterColumns.forEach((op) => {
@@ -97,7 +98,11 @@ export class ComparatorService {
     if (!def) return '';
 
     // 0. Apply Domain Normalization (Variables/Schemas/etc)
-    let processed = this._applyNormalization(def, env);
+    let processed: any = this._applyNormalization(def, env);
+
+    if (typeof processed !== 'string') {
+       processed = String(processed || '');
+    }
 
     processed = processed.replace(/,$/, '').trim();
 
@@ -124,7 +129,7 @@ export class ComparatorService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private compareColumns(srcTable: any, destTable: any) {
+  private compareColumns(srcTable: any, destTable: any, srcDialect: string = 'mysql', destDialect: string = 'mysql') {
     const alterColumns: { type: 'ADD' | 'MODIFY'; name: string; def: string }[] = [];
     const missingColumns: string[] = [];
     // Track the last column that exists in BOTH src and dest, so AFTER `col`
@@ -132,31 +137,57 @@ export class ComparatorService {
     let prevExistingColumnName: string | null = null;
 
     // Check for ADD / MODIFY
-    for (const columnName in srcTable.columns) {
-      if (!destTable.columns[columnName]) {
+    const srcColumnNames = Array.isArray(srcTable.columns) ? srcTable.columns.map((c: any) => c.name) : Object.keys(srcTable.columns);
+    const destColumns = destTable.columns;
+
+    for (const columnName of srcColumnNames) {
+      const srcCol = Array.isArray(srcTable.columns) ? srcTable.columns.find((c: any) => c.name === columnName) : srcTable.columns[columnName];
+      const destCol = Array.isArray(destColumns) ? (destColumns as any[]).find((c: any) => c.name === columnName) : destColumns[columnName];
+
+      if (!destCol) {
         // ADD
-        const colDef = srcTable.columns[columnName].replace(/[,;]$/, '');
-        const position = prevExistingColumnName ? `AFTER \`${prevExistingColumnName}\`` : 'FIRST';
-        const def = `${colDef} ${position}`;
+        const colDef = typeof srcCol === 'string' ? srcCol : (srcCol.rawDefinition || srcCol.definition);
+        const position = (destDialect === 'mysql' && prevExistingColumnName) ? `AFTER \`${prevExistingColumnName}\`` : '';
+        const def = `${colDef} ${position}`.trim();
         alterColumns.push({ type: 'ADD', name: columnName, def: def });
       } else {
         // Check MODIFY
-        const srcColumnDef = srcTable.columns[columnName];
-        const destColumnDef = destTable.columns[columnName];
+        if (srcCol && destCol && typeof srcCol !== 'string' && typeof destCol !== 'string') {
+          // Semantic structural comparison
+          const properties = ['dataType', 'nullable', 'defaultValue', 'autoIncrement', 'unsigned', 'charset', 'collate'];
+          let hasChange = false;
 
-        const normSrc = this._normalizeDef(srcColumnDef);
-        const normDest = this._normalizeDef(destColumnDef);
+          for (const prop of properties) {
+            if (SemanticMapper.shouldIgnoreProperty(prop, srcDialect, destDialect)) continue;
+            if (!SemanticMapper.arePropertiesEqual(prop, srcCol[prop], destCol[prop], srcDialect, destDialect)) {
+              hasChange = true;
+              break;
+            }
+          }
 
-        if (normSrc !== normDest) {
-          alterColumns.push({ type: 'MODIFY', name: columnName, def: srcColumnDef });
+          if (hasChange) {
+            const def = srcCol.rawDefinition || srcCol.definition;
+            alterColumns.push({ type: 'MODIFY', name: columnName, def });
+          }
+        } else {
+          // Fallback to string normalization
+          const srcColumnDef = typeof srcCol === 'string' ? srcCol : (srcCol?.rawDefinition || srcCol?.definition || '');
+          const destColumnDef = typeof destCol === 'string' ? destCol : (destCol?.rawDefinition || destCol?.definition || '');
+          const normSrc = this._normalizeDef(srcColumnDef);
+          const normDest = this._normalizeDef(destColumnDef);
+          if (normSrc !== normDest) {
+            alterColumns.push({ type: 'MODIFY', name: columnName, def: srcColumnDef });
+          }
         }
-        prevExistingColumnName = columnName;
       }
+      prevExistingColumnName = columnName;
     }
 
     // Check for DROP
-    for (const destColName in destTable.columns) {
-      if (!srcTable.columns[destColName]) {
+    const destColumnNames = Array.isArray(destTable.columns) ? destTable.columns.map((c: any) => c.name) : Object.keys(destTable.columns);
+    for (const destColName of destColumnNames) {
+      const srcHasCol = Array.isArray(srcTable.columns) ? srcTable.columns.find((c: any) => c.name === destColName) : srcTable.columns[destColName];
+      if (!srcHasCol) {
         missingColumns.push(destColName);
       }
     }
@@ -169,15 +200,20 @@ export class ComparatorService {
     const ops: IDiffOperation[] = [];
 
     // 1. Check for new or changed indexes
-    for (const indexName in srcTable.indexes) {
-      const srcDef = srcTable.indexes[indexName].replace(/,$/, '').trim();
+    const srcIndexNames = Array.isArray(srcTable.indexes) ? srcTable.indexes.map((i: any) => i.name) : Object.keys(srcTable.indexes);
+    for (const indexName of srcIndexNames) {
+      let srcDef: any = Array.isArray(srcTable.indexes) ? srcTable.indexes.find((i: any) => i.name === indexName) : srcTable.indexes[indexName];
+      if (typeof srcDef !== 'string') srcDef = srcDef?.definition || String(srcDef || '');
+      srcDef = srcDef.replace(/,$/, '').trim();
 
-      if (!destTable.indexes[indexName]) {
+      if (!destTable.indexes || (Array.isArray(destTable.indexes) ? !destTable.indexes.find((i: any) => i.name === indexName) : !destTable.indexes[indexName])) {
         // ADD
         ops.push({ type: 'ADD', target: 'INDEX', name: indexName, definition: srcDef });
       } else {
         // COMPARE
-        const destDef = destTable.indexes[indexName].replace(/,$/, '').trim();
+        let destDef: any = Array.isArray(destTable.indexes) ? destTable.indexes.find((i: any) => i.name === indexName) : destTable.indexes[indexName];
+        if (typeof destDef !== 'string') destDef = destDef?.definition || String(destDef || '');
+        destDef = destDef.replace(/,$/, '').trim();
         const normSrc = this._normalizeDef(srcDef);
         const normDest = this._normalizeDef(destDef);
 
@@ -192,8 +228,10 @@ export class ComparatorService {
     }
 
     // 2. Check for deprecated indexes
-    for (const indexName in destTable.indexes) {
-      if (!srcTable.indexes[indexName]) {
+    const destIndexNames = Array.isArray(destTable.indexes) ? destTable.indexes.map((i: any) => i.name) : Object.keys(destTable.indexes || {});
+    for (const indexName of destIndexNames) {
+      const srcHasIdx = Array.isArray(srcTable.indexes) ? srcTable.indexes.find((i: any) => i.name === indexName) : srcTable.indexes[indexName];
+      if (!srcHasIdx) {
         ops.push({ type: 'DROP', target: 'INDEX', name: indexName });
       }
     }
@@ -206,15 +244,20 @@ export class ComparatorService {
     const ops: IDiffOperation[] = [];
 
     // 1. Check for new or changed foreign keys
-    for (const fkName in srcTable.foreignKeys) {
-      const srcDef = srcTable.foreignKeys[fkName].replace(/,$/, '').trim();
+    const srcFKNames = Array.isArray(srcTable.foreignKeys) ? srcTable.foreignKeys.map((f: any) => f.name) : Object.keys(srcTable.foreignKeys);
+    for (const fkName of srcFKNames) {
+      let srcDef: any = Array.isArray(srcTable.foreignKeys) ? srcTable.foreignKeys.find((f: any) => f.name === fkName) : srcTable.foreignKeys[fkName];
+      if (typeof srcDef !== 'string') srcDef = srcDef?.definition || String(srcDef || '');
+      srcDef = srcDef.replace(/,$/, '').trim();
 
-      if (!destTable.foreignKeys[fkName]) {
+      if (!destTable.foreignKeys || (Array.isArray(destTable.foreignKeys) ? !destTable.foreignKeys.find((f: any) => f.name === fkName) : !destTable.foreignKeys[fkName])) {
         // ADD
         ops.push({ type: 'ADD', target: 'FOREIGN_KEY', name: fkName, definition: srcDef });
       } else {
         // COMPARE
-        const destDef = destTable.foreignKeys[fkName].replace(/,$/, '').trim();
+        let destDef: any = Array.isArray(destTable.foreignKeys) ? destTable.foreignKeys.find((f: any) => f.name === fkName) : destTable.foreignKeys[fkName];
+        if (typeof destDef !== 'string') destDef = destDef?.definition || String(destDef || '');
+        destDef = destDef.replace(/,$/, '').trim();
         const normSrc = this._normalizeDef(srcDef);
         const normDest = this._normalizeDef(destDef);
 
@@ -227,8 +270,10 @@ export class ComparatorService {
     }
 
     // 2. Check for deprecated foreign keys
-    for (const fkName in destTable.foreignKeys) {
-      if (!srcTable.foreignKeys[fkName]) {
+    const destFKNames = Array.isArray(destTable.foreignKeys) ? destTable.foreignKeys.map((f: any) => f.name) : Object.keys(destTable.foreignKeys || {});
+    for (const fkName of destFKNames) {
+      const srcHasFK = Array.isArray(srcTable.foreignKeys) ? srcTable.foreignKeys.find((f: any) => f.name === fkName) : srcTable.foreignKeys[fkName];
+      if (!srcHasFK) {
         ops.push({ type: 'DROP', target: 'FOREIGN_KEY', name: fkName });
       }
     }
@@ -467,6 +512,8 @@ export class ComparatorService {
     destDbName: string,
     ddlType: string,
     specificName?: string,
+    srcDialect: string = 'mysql',
+    destDialect: string = 'mysql',
   ): Promise<any[]> {
     const storageType = ddlType.toUpperCase(); // 'TABLES', 'PROCEDURES', etc.
 
@@ -529,7 +576,7 @@ export class ComparatorService {
         if (hasChange) {
           status = 'different';
           if (storageType === 'TABLES') {
-            const tableDiff = this.compareTables(srcDDL, destDDL);
+            const tableDiff = this.compareTables(srcDDL, destDDL, srcDialect, destDialect);
             alterStatements = this.migrator.generateTableAlterSQL(tableDiff);
             const colCount = tableDiff.operations.filter(op => op.target === 'COLUMN').length;
             const idxCount = tableDiff.operations.filter(op => op.target === 'INDEX').length;
@@ -606,15 +653,18 @@ export class ComparatorService {
   private _applyNormalization(content: string, env?: string): string {
     if (!content) return '';
     const norms = this.configService.getDomainNormalization(env);
-    let result = content;
+    let result: any = content;
     for (const norm of norms) {
       // Use a more robust check than instanceof RegExp for IPC compatibility
       const pattern = norm?.pattern;
       if (pattern && (pattern instanceof RegExp || typeof pattern.test === 'function')) {
-        result = result.replace(pattern, norm.replacement || '');
+        const replacement = norm.replacement || '';
+        if (typeof result === 'string') {
+          result = result.replace(pattern, replacement);
+        }
       }
     }
-    return result;
+    return String(result || '');
   }
 
   private _unescapeHtml(s: string): string {

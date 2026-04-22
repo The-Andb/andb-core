@@ -170,7 +170,10 @@ export class SchemaOrchestrator {
     const srcDbName = srcConn?.config?.database || 'default';
     const destDbName = destConn.config?.database || 'default';
 
-    const diffResults = await this.comparator.compareFromStorage(srcEnv, destEnv, srcDbName, destDbName, type, name);
+    const srcDialect = srcConn?.type || 'mysql';
+    const destDialect = destConn.type || 'mysql';
+
+    const diffResults = await this.comparator.compareFromStorage(srcEnv, destEnv, srcDbName, destDbName, type, name, srcDialect, destDialect);
 
     const ddlList: string[] = [];
 
@@ -224,7 +227,9 @@ export class SchemaOrchestrator {
     // Auto-generate DDL if missing
     for (const obj of safeObjects) {
        if (!obj.ddl) {
-          const diffResults = await this.comparator.compareFromStorage(srcEnv, destEnv, srcDbName, destDbName, obj.type, obj.name);
+          const srcDialect = srcConn?.type || 'mysql';
+          const destDialect = destConn.type || 'mysql';
+          const diffResults = await this.comparator.compareFromStorage(srcEnv, destEnv, srcDbName, destDbName, obj.type, obj.name, srcDialect, destDialect);
           
           const itemDiff = diffResults.find((r: any) => r.name === obj.name);
           if (itemDiff && itemDiff.alterStatements && itemDiff.alterStatements.length > 0) {
@@ -299,7 +304,7 @@ export class SchemaOrchestrator {
 
         // Handle Auto-Backup
         if (autoBackup && this.requiresBackup(obj.status)) {
-          await this.handleObjectBackup(destEnv, dbName, obj, destIntro);
+          await this.handleObjectBackup(destEnv, dbName, obj, destIntro, destConn.type);
         }
 
         try {
@@ -317,7 +322,7 @@ export class SchemaOrchestrator {
 
              if (isDrop) {
                 // Remove from storage to reflect drop
-                await this.storageService.deleteDDL(destEnv, dbName, storageType, obj.name);
+                await this.storageService.deleteDDL(destEnv, dbName, storageType, obj.name, destConn.type);
                 this.logger.info(`Auto-synced (DELETE) storage for ${storageType} ${obj.name}`);
              } else {
                 let newDdl = await destIntro.getObjectDDL(dbName, obj.type, obj.name);
@@ -325,7 +330,7 @@ export class SchemaOrchestrator {
                    // Normalize: Uppercase keywords so it matches what ExporterService does natively before saving
                    newDdl = this.parser.uppercaseKeywords(newDdl);
                    
-                   await this.storageService.saveDDL(destEnv, dbName, storageType, obj.name, newDdl);
+                   await this.storageService.saveDDL(destEnv, dbName, storageType, obj.name, newDdl, destConn.type);
                    this.logger.info(`Auto-synced (UPSERT) storage for ${storageType} ${obj.name}`);
                 } else {
                    this.logger.warn(`Could not fetch new DDL for ${obj.name} after migration to update storage.`);
@@ -366,7 +371,7 @@ export class SchemaOrchestrator {
     return statuses.includes(status);
   }
 
-  private async handleObjectBackup(env: string, db: string, obj: any, intro: any) {
+  private async handleObjectBackup(env: string, db: string, obj: any, intro: any, databaseType: string = 'mysql') {
     try {
       const currentDdl = await intro.getObjectDDL(db, obj.type, obj.name);
       if (currentDdl) {
@@ -377,6 +382,7 @@ export class SchemaOrchestrator {
           obj.name,
           currentDdl,
           'PRE_MIGRATE',
+          databaseType
         );
         this.logger.info(`Auto-backup created for ${obj.type} ${obj.name}`);
       }
@@ -485,7 +491,8 @@ export class SchemaOrchestrator {
           type.toLowerCase(),
           name,
           ddl,
-          'MANUAL_SNAPSHOT'
+          'MANUAL_SNAPSHOT',
+          conn.type
         );
         return { success: true, message: `Snapshot created for ${type} ${name}` };
       }
@@ -533,6 +540,80 @@ export class SchemaOrchestrator {
       const intro = driver.getIntrospectionService();
       const dbName = connection.database || connection.name || 'default';
       return await intro.getFKGraph(dbName);
+    } finally {
+      await driver.disconnect();
+    }
+  }
+
+  async getObjectDDL(payload: any) {
+    const { connection, objectType, objectName } = payload;
+    const driver = await this.getDriverFromConnection(connection);
+
+    try {
+      await driver.connect();
+      const introspection = driver.getIntrospectionService();
+      const dbName = connection.database || connection.name || 'default';
+
+      switch (objectType) {
+        case 'table':
+          return await introspection.getTableDDL(dbName, objectName);
+        case 'view':
+          return await introspection.getViewDDL(dbName, objectName);
+        case 'procedure':
+          return await introspection.getProcedureDDL(dbName, objectName);
+        case 'function':
+          return await introspection.getFunctionDDL(dbName, objectName);
+        case 'trigger':
+          return await introspection.getTriggerDDL(dbName, objectName);
+        case 'event':
+          return await introspection.getEventDDL(dbName, objectName);
+        default:
+          return await introspection.getObjectDDL(dbName, objectType, objectName);
+      }
+    } finally {
+      await driver.disconnect();
+    }
+  }
+
+  async getDBStatus(payload: any) {
+    const { connection } = payload;
+    const driver = await this.getDriverFromConnection(connection);
+
+    try {
+      await driver.connect();
+      const monitoring = (driver as any).getMonitoringService();
+      
+      const [version, status, processList, connections] = await Promise.all([
+        monitoring.getVersion(),
+        monitoring.getStatus(),
+        monitoring.getProcessList(),
+        monitoring.getConnections(),
+      ]);
+
+      return {
+        version,
+        status,
+        activeProcesses: processList,
+        connections,
+      };
+    } finally {
+      await driver.disconnect();
+    }
+  }
+
+  async testConnection(payload: any) {
+    const { connection } = payload;
+    const driver = await this.getDriverFromConnection(connection);
+
+    try {
+      await driver.connect();
+      const intro = driver.getIntrospectionService();
+      const serverInfo = await intro.getServerInfo();
+      return {
+        success: true,
+        message: 'Connection successful',
+        serverInfo,
+      };
     } finally {
       await driver.disconnect();
     }

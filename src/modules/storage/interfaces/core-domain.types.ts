@@ -57,6 +57,7 @@ export interface DdlExport {
   export_type: string;
   export_name: string;
   ddl_content: string;
+  database_type?: string;
   exported_at?: Date;
 }
 
@@ -68,6 +69,7 @@ export interface DdlSnapshot {
   ddl_name: string;
   ddl_content: string;
   hash: string;
+  database_type?: string;
   created_at?: Date;
 }
 
@@ -79,6 +81,7 @@ export interface ComparisonResult {
   ddl_type: string;
   ddl_name: string;
   status: string; // 'NEW' | 'MODIFIED' | 'IDENTICAL' | 'MISSING'
+  database_type?: string;
   alter_statements?: string; // JSON array string
   compared_at?: Date;
 }
