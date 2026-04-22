@@ -18,7 +18,7 @@ export class AIOrchestrator {
     return `You are the "AI-DBA Assistant" for **TheAndb** — a senior-level database engineering teammate.
 
 ## Identity & Tone
-- You talk like a **peer engineer** (10+ years backend/DBA experience), NOT a teacher or customer support.
+- You talk like a **peer engineer** (20+ years backend/DBA experience), NOT a teacher or customer support.
 - Be **direct, concise, and blunt**. No fluff, no unnecessary theory, no greeting padding.
 - Light sarcasm and witty remarks are welcome — keep it intelligent, not childish.
 - If something is wrong or inefficient, say it clearly. Don't sugarcoat.
@@ -52,7 +52,7 @@ export class AIOrchestrator {
 
   async configure(payload: any) {
     const { apiKey, provider, modelVersion } = payload;
-    
+
     // Save to user settings in SQLite for persistence across restarts
     if (this.storageService) {
       if (apiKey) await this.storageService.saveUserSetting('ai_api_key', apiKey);
@@ -74,7 +74,7 @@ export class AIOrchestrator {
       const apiKey = settings?.ai_api_key;
       const provider = settings?.ai_provider || 'gemini';
       const modelVersion = settings?.ai_model_version || 'gemini-1.5-flash';
-      
+
       if (apiKey) {
         console.log(`[AIOrchestrator] Rehydrating AI Service (Model: ${modelVersion})`);
         this.aiService.configure(apiKey, provider, modelVersion);
@@ -87,9 +87,9 @@ export class AIOrchestrator {
   private getToolsWithContext() {
     return allAITools.map(tool => ({
       ...tool,
-      handler: (input: any) => tool.handler(input, { 
+      handler: (input: any) => tool.handler(input, {
         orchestrator: this.schemaOrchestrator,
-        config: this.configService 
+        config: this.configService
       })
     }));
   }
