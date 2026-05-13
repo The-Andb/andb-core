@@ -6,11 +6,28 @@ import { IGitStatus } from '../../common/interfaces/git.interface';
 export class GitOrchestrator {
   private readonly logger = getLogger({ logName: 'GitOrchestrator' });
   private gitService: any = null;
+  private syncMutex: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly mirrorService: SchemaMirrorService,
     private readonly configService?: any,
   ) { }
+
+  private async acquireLock(): Promise<() => void> {
+    let release: () => void = () => {};
+    const nextPromise = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const currentMutex = this.syncMutex;
+    this.syncMutex = nextPromise;
+    
+    try {
+      await currentMutex;
+    } catch (err) {
+      // Even if previous op failed, we MUST allow current lock to proceed
+    }
+    return release;
+  }
 
   private async getGitService() {
     if (this.gitService) return this.gitService;
@@ -84,6 +101,15 @@ export class GitOrchestrator {
   }
 
   async gitSync(payload: any) {
+    const release = await this.acquireLock();
+    try {
+      return await this._gitSyncInternal(payload);
+    } finally {
+      release();
+    }
+  }
+
+  private async _gitSyncInternal(payload: any) {
     const { env, db, message, author } = payload;
     const config = this.prepareConfig(payload);
 

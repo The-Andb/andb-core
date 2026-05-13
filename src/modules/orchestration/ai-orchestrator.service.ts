@@ -15,16 +15,18 @@ export class AIOrchestrator {
   ) { }
 
   async configure(payload: any) {
-    const { apiKey, provider, modelVersion } = payload;
+    const { apiKey, provider, modelVersion, vertexProjectId, vertexRegion } = payload;
 
     // Save to user settings in SQLite for persistence across restarts
     if (this.storageService) {
-      if (apiKey) await this.storageService.saveUserSetting('ai_api_key', apiKey);
-      if (provider) await this.storageService.saveUserSetting('ai_provider', provider);
-      if (modelVersion) await this.storageService.saveUserSetting('ai_model_version', modelVersion);
+      if (apiKey !== undefined) await this.storageService.saveUserSetting('ai_api_key', apiKey);
+      if (provider !== undefined) await this.storageService.saveUserSetting('ai_provider', provider);
+      if (modelVersion !== undefined) await this.storageService.saveUserSetting('ai_model_version', modelVersion);
+      if (vertexProjectId !== undefined) await this.storageService.saveUserSetting('ai_vertex_project_id', vertexProjectId);
+      if (vertexRegion !== undefined) await this.storageService.saveUserSetting('ai_vertex_region', vertexRegion);
     }
 
-    this.aiService.configure(apiKey, provider, modelVersion);
+    this.aiService.configure(apiKey, provider, modelVersion, vertexProjectId, vertexRegion);
     return { success: true };
   }
 
@@ -38,10 +40,12 @@ export class AIOrchestrator {
       const apiKey = settings?.ai_api_key;
       const provider = settings?.ai_provider || 'gemini';
       const modelVersion = settings?.ai_model_version || 'gemini-1.5-flash';
+      const vertexProjectId = settings?.ai_vertex_project_id;
+      const vertexRegion = settings?.ai_vertex_region || 'us-central1';
 
-      if (apiKey) {
-        console.log(`[AIOrchestrator] Rehydrating AI Service (Model: ${modelVersion})`);
-        this.aiService.configure(apiKey, provider, modelVersion);
+      if (apiKey || provider) {
+        console.log(`[AIOrchestrator] Rehydrating AI Service (Provider: ${provider}, Model: ${modelVersion})`);
+        this.aiService.configure(apiKey, provider, modelVersion, vertexProjectId, vertexRegion);
       }
     } catch (e: any) {
       console.warn(`[AIOrchestrator] Rehydration failed: ${e.message}`);

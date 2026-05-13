@@ -9,10 +9,20 @@ export class AIService {
   private provider: string = 'gemini';
   private apiKey: string | null = null;
   private availableModels: string[] = [];
+  private vertexProjectId?: string;
+  private vertexRegion?: string;
 
-  public configure(apiKey: string, provider: string = 'gemini', modelName?: string) {
+  public configure(
+    apiKey: string, 
+    provider: string = 'gemini', 
+    modelName?: string,
+    vertexProjectId?: string,
+    vertexRegion?: string
+  ) {
     this.apiKey = apiKey;
     this.provider = provider;
+    this.vertexProjectId = vertexProjectId;
+    this.vertexRegion = vertexRegion || 'us-central1';
     
     // Normalize model name
     let internalModelName = modelName;
@@ -26,6 +36,8 @@ export class AIService {
       internalModelName = internalModelName || 'gpt-4o';
     } else if (provider === 'anthropic') {
       internalModelName = internalModelName || 'claude-3-5-sonnet-20240620';
+    } else if (provider === 'vertex') {
+      internalModelName = internalModelName || 'gemini-1.5-flash';
     }
     
     this.modelName = internalModelName || 'unknown';
@@ -58,6 +70,17 @@ export class AIService {
     }
   }
 
+  private parseBase64Image(dataUrl: string) {
+    const matches = dataUrl.match(/^data:(.+);base64,(.+)$/);
+    if (matches && matches.length === 3) {
+      return {
+        mimeType: matches[1],
+        data: matches[2]
+      };
+    }
+    return null;
+  }
+
   public async ask(question: string, context?: any, tools?: any[], systemInstruction?: string): Promise<string> {
     if (!this.apiKey) {
       throw new Error('AI Service not configured. Please provide an API Key first.');
@@ -70,6 +93,10 @@ export class AIService {
     
     if (this.provider === 'anthropic') {
       return this.askAnthropic(question, context, systemInstruction);
+    }
+
+    if (this.provider === 'vertex') {
+      return this.askVertexAI(question, context, systemInstruction);
     }
 
     // Default to Gemini Strategy (Legacy/Main)
@@ -100,12 +127,27 @@ export class AIService {
     }));
 
     try {
-      let messages = [
-        {
-          role: 'user',
-          parts: [{ text: `${question}\n\nContext:\n${JSON.stringify(context || {}, null, 2)}` }]
+      const promptContext = { ...context };
+      const images = promptContext.images || [];
+      delete promptContext.images;
+
+      const parts: any[] = [{ text: `${question}\n\nContext:\n${JSON.stringify(promptContext, null, 2)}` }];
+
+      if (Array.isArray(images)) {
+        for (const img of images) {
+          const parsed = this.parseBase64Image(img);
+          if (parsed) {
+            parts.push({
+              inlineData: {
+                mimeType: parsed.mimeType,
+                data: parsed.data
+              }
+            });
+          }
         }
-      ];
+      }
+
+      let messages = [{ role: 'user', parts }];
 
       return await this.executeChatLoop(this.modelName, messages, toolDeclarations, tools, systemInstruction);
     } catch (error: any) {
@@ -122,9 +164,27 @@ export class AIService {
       messages.push({ role: 'system', content: systemInstruction });
     }
     
+    const promptContext = { ...context };
+    const images = promptContext.images || [];
+    delete promptContext.images;
+
+    const textPrompt = `${question}\n\nContext:\n${JSON.stringify(promptContext, null, 2)}`;
+    const contentArr: any[] = [{ type: 'text', text: textPrompt }];
+
+    if (Array.isArray(images)) {
+      for (const img of images) {
+        contentArr.push({
+          type: 'image_url',
+          image_url: {
+            url: img
+          }
+        });
+      }
+    }
+
     messages.push({ 
       role: 'user', 
-      content: `${question}\n\nContext:\n${JSON.stringify(context || {}, null, 2)}` 
+      content: contentArr 
     });
 
     const response = await fetch(url, {
@@ -152,13 +212,36 @@ export class AIService {
   private async askAnthropic(question: string, context?: any, systemInstruction?: string): Promise<string> {
     const url = 'https://api.anthropic.com/v1/messages';
     
+    const promptContext = { ...context };
+    const images = promptContext.images || [];
+    delete promptContext.images;
+
+    const textPrompt = `${question}\n\nContext:\n${JSON.stringify(promptContext, null, 2)}`;
+    const contentArr: any[] = [{ type: 'text', text: textPrompt }];
+
+    if (Array.isArray(images)) {
+      for (const img of images) {
+        const parsed = this.parseBase64Image(img);
+        if (parsed) {
+          contentArr.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: parsed.mimeType,
+              data: parsed.data
+            }
+          });
+        }
+      }
+    }
+
     const body: any = {
       model: this.modelName,
       max_tokens: 2048,
       messages: [
         { 
           role: 'user', 
-          content: `${question}\n\nContext:\n${JSON.stringify(context || {}, null, 2)}` 
+          content: contentArr 
         }
       ],
       temperature: 0.2
@@ -185,6 +268,64 @@ export class AIService {
 
     const data = await response.json();
     return data.content?.[0]?.text || 'No response from Anthropic';
+  }
+
+  private async askVertexAI(question: string, context?: any, systemInstruction?: string): Promise<string> {
+    if (!this.vertexProjectId || !this.vertexRegion) {
+      throw new Error('Vertex AI requires configuration of GCP Project ID and GCP Region.');
+    }
+
+    const url = `https://${this.vertexRegion}-aiplatform.googleapis.com/v1/projects/${this.vertexProjectId}/locations/${this.vertexRegion}/publishers/google/models/${this.modelName}:generateContent`;
+
+    const promptContext = { ...context };
+    const images = promptContext.images || [];
+    delete promptContext.images;
+
+    const parts: any[] = [{ text: `${question}\n\nContext:\n${JSON.stringify(promptContext, null, 2)}` }];
+
+    if (Array.isArray(images)) {
+      for (const img of images) {
+        const parsed = this.parseBase64Image(img);
+        if (parsed) {
+          parts.push({
+            inlineData: {
+              mimeType: parsed.mimeType,
+              data: parsed.data
+            }
+          });
+        }
+      }
+    }
+
+    const payload: any = {
+      contents: [{ role: 'user', parts }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 2048 }
+    };
+
+    if (systemInstruction) {
+      payload.systemInstruction = {
+        parts: [{ text: systemInstruction }]
+      };
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Vertex AI Error ${response.status}: ${err}`);
+    }
+
+    const data = await response.json();
+    const candidate = data.candidates?.[0];
+    const message = candidate?.content;
+    return message?.parts?.map((p: any) => p.text).join('') || 'No response from Vertex AI';
   }
 
   private async executeChatLoop(model: string, messages: any[], toolDeclarations?: any[], tools?: any[], systemInstruction?: string): Promise<string> {
