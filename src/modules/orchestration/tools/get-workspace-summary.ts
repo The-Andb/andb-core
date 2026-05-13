@@ -1,28 +1,41 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { AIToolDefinition } from './types';
 
 export const getWorkspaceSummaryTool: AIToolDefinition = {
   name: 'get_workspace_summary',
   description: 'Returns a summary of the current workspace, including the number of projects, environments, and configured database connections.',
-  inputSchema: z.object({}),
+  inputSchema: z.object({
+    refresh: z.boolean().optional()
+  }),
   handler: async (_input: any, context?: any) => {
-    const { config } = context || {};
+    const { config } = (context || {}) as { config: any };
     if (!config) throw new Error('ProjectConfigService context required');
 
-    const projects = config.getProjects ? config.getProjects() : [];
-    const currentProject = config.getCurrentProject ? config.getCurrentProject() : null;
+    // Force reload projects from storage to avoid stale cache (e.g. newly created projects)
+    if (typeof config.reload === 'function') {
+      await config.reload();
+    }
+
+    const projects = typeof config.getProjects === 'function' ? config.getProjects() : [];
+    const currentProject = typeof config.getCurrentProject === 'function' ? config.getCurrentProject() : null;
     
-    // In @the-andb/core, connections are managed via project config
-    const connections = currentProject?.connections || [];
-    const environments = currentProject?.environments || [];
+    // Use getEnvironments() to get list from ProjectConfigService
+    const environments = typeof config.getEnvironments === 'function' ? config.getEnvironments() : [];
+    const connectionsCount = environments.length; // Simplified: 1 connection per env in current model
 
     return {
       projectsCount: projects.length,
       currentProject: currentProject?.name || 'Default',
-      connectionsCount: connections.length,
+      connectionsCount: connectionsCount,
       environmentsCount: environments.length,
-      environmentsList: environments.map((e: any) => e.name),
-      summary: `Workspace has ${projects.length} projects. Current project "${currentProject?.name}" has ${connections.length} connections across ${environments.length} environments.`
+      environmentsList: environments,
+      projectsList: projects.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        icon: p.icon
+      })),
+      summary: `Workspace has ${projects.length} projects. Current project "${currentProject?.name || 'Default'}" has ${environments.length} configured environments: ${environments.join(', ')}.`
     };
   }
 };

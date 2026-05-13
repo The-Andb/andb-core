@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { Container } from './container';
 import { ParserService } from './modules/parser/parser.service';
 import { ICoreStorageStrategy } from './modules/storage/interfaces/core-storage-strategy.interface';
+import { IPromptProvider } from './common/interfaces/prompt.interface';
 
 export class CoreBridge {
   private static container: Container | null = null;
@@ -12,7 +13,7 @@ export class CoreBridge {
   /**
    * Initialize the Core Engine (Singleton with Lock)
    */
-  public static async init(userDataPath: string, customDbPath?: string, strategy?: ICoreStorageStrategy, projectBaseDir?: string) {
+  public static async init(userDataPath: string, customDbPath?: string, strategy?: ICoreStorageStrategy, projectBaseDir?: string, onAppEvent?: (event: any) => void, promptProvider?: IPromptProvider) {
     if (this.container) return this.container;
 
     if (this.initPromise) {
@@ -44,7 +45,7 @@ export class CoreBridge {
         }
       }
 
-      this.container = await Container.create(strategy, dbPath, projectBaseDir);
+      this.container = await Container.create(strategy, dbPath, projectBaseDir, onAppEvent, promptProvider);
       console.log('✅ [CoreBridge] Engine Ready.');
       return this.container;
     })();

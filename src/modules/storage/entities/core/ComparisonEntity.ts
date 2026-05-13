@@ -1,6 +1,7 @@
-import { Entity, PrimaryColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryColumn, Column, CreateDateColumn, Unique } from 'typeorm';
 
 @Entity('comparisons')
+@Unique(['source_env', 'target_env', 'database_name', 'ddl_type', 'ddl_name', 'database_type'])
 export class ComparisonEntity {
   @PrimaryColumn('text') id!: string;
   @Column('text', { default: '' }) source_env!: string;

@@ -9,7 +9,7 @@ export class SchemaOrchestrator {
 
   constructor(
     private readonly configService: ProjectConfigService,
-    private storageService: any,
+    public readonly storageService: any,
     private driverFactory: any,
     private comparator: any,
     private exporter: any,
@@ -613,6 +613,28 @@ export class SchemaOrchestrator {
         success: true,
         message: 'Connection successful',
         serverInfo,
+      };
+    } finally {
+      await driver.disconnect();
+    }
+  }
+
+  async executeQuery(payload: any) {
+    const { connection, sql, params = [] } = payload;
+    const driver = await this.getDriverFromConnection(connection);
+
+    try {
+      await driver.connect();
+      const rows = await driver.query(sql, params);
+      return {
+        success: true,
+        data: rows,
+      };
+    } catch (err: any) {
+      this.logger.error(`Query execution failed: ${err.message}`);
+      return {
+        success: false,
+        error: err.message,
       };
     } finally {
       await driver.disconnect();

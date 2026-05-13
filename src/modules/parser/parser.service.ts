@@ -1,14 +1,19 @@
 import { MysqlAstParser } from './adapters/mysql-ast.parser';
 import { PostgresAstParser } from './adapters/postgres-ast.parser';
+import { SqliteAstParser } from './adapters/sqlite-ast.parser';
 import { ISqlAstParser } from './interfaces/sql-ast-parser.interface';
 
 export class ParserService {
   private mysqlParser = new MysqlAstParser();
   private postgresParser = new PostgresAstParser();
+  private sqliteParser = new SqliteAstParser();
 
   getParser(dialect: string = 'mysql'): ISqlAstParser {
     if (dialect?.toLowerCase() === 'postgres' || dialect?.toLowerCase() === 'postgresql') {
       return this.postgresParser;
+    }
+    if (dialect?.toLowerCase() === 'sqlite' || dialect?.toLowerCase() === 'sqlite3') {
+      return this.sqliteParser;
     }
     return this.mysqlParser;
   }
@@ -503,7 +508,8 @@ export class ParserService {
     try {
       if (!tableSQL || !tableSQL.toUpperCase().includes('CREATE TABLE')) return null;
 
-      const tableNameMatch = tableSQL.match(/CREATE TABLE\s+`?([^`\s(]+)`?/i);
+      // Handle IF NOT EXISTS and optional quotes (`, ", [])
+      const tableNameMatch = tableSQL.match(/CREATE TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[`"\[])?([^`"\]\s(]+)(?:[`"\]])?/i);
       if (!tableNameMatch) return null;
       const tableName = tableNameMatch[1];
 
@@ -583,20 +589,31 @@ export class ParserService {
           continue;
         }
 
-        if (up.startsWith('KEY') || up.startsWith('INDEX') || up.startsWith('UNIQUE KEY')) {
-          const type = up.startsWith('UNIQUE') ? 'UNIQUE' : 'INDEX';
-          const nameMatch = line.match(/(?:KEY|INDEX)\s+`?([^`\s(]+)`?/i);
+        if (up.startsWith('KEY') || up.startsWith('INDEX') || up.startsWith('UNIQUE KEY') || up.startsWith('UNIQUE')) {
+          const isUnique = up.includes('UNIQUE');
+          const type = isUnique ? 'UNIQUE' : 'INDEX';
+          const nameMatch = line.match(/(?:KEY|INDEX|UNIQUE(?:\s+KEY)?)\s+[`"\[]?([^`"\]\s(]+)[`"\]]?/i);
           const colMatch = line.match(/\((.*?)\)/);
+          const name = nameMatch ? nameMatch[1] : `idx_${Math.random().toString(36).substring(7)}`;
+          const columns = colMatch ? colMatch[1].trim() : '';
+          
+          // Reconstruct valid standalone definition for SQLite/etc
+          let definition = line;
+          if (!up.includes('CREATE') && !up.includes('INDEX')) {
+             definition = `CREATE ${isUnique ? 'UNIQUE ' : ''}INDEX "${name}" ON "${tableName}" (${columns})`;
+          }
+
           indexes.push({
-            name: nameMatch ? nameMatch[1] : 'anonymous',
+            name,
             type,
-            columns: colMatch ? colMatch[1].trim() : '',
-            definition: line,
+            columns,
+            definition: definition,
           });
           continue;
         }
 
-        const colNameMatch = line.match(/^`?([^`\s]+)`?\s+([a-zA-Z0-9_().,'"\s]+)/i);
+        // Improved column name match: handle `, ", [], and unquote them
+        const colNameMatch = line.match(/^(?:[`"\[])?([^`"\]\s]+)(?:[`"\]])?\s+([a-zA-Z0-9_().,'"\s]+)/i);
         if (colNameMatch) {
           const name = colNameMatch[1];
           let fullType = colNameMatch[2].trim();

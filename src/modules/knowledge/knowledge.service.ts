@@ -8,10 +8,21 @@ export interface KnowledgeChunk {
 }
 
 export class KnowledgeService {
+  private docsPaths: string[] = [];
   private chunks: KnowledgeChunk[] = [];
   private isLoaded = false;
 
-  constructor(private readonly docsPath: string) {}
+  constructor(initialDocsPath?: string) {
+    if (initialDocsPath) {
+      this.docsPaths.push(initialDocsPath);
+    }
+  }
+
+  public addPath(p: string) {
+    if (p && !this.docsPaths.includes(p)) {
+      this.docsPaths.push(p);
+    }
+  }
 
   /**
    * Load and parse all documentation files into searchable chunks.
@@ -20,20 +31,23 @@ export class KnowledgeService {
     if (this.isLoaded) return;
 
     try {
-      if (!fs.existsSync(this.docsPath)) {
-        console.warn(`[KnowledgeService] Docs path not found: ${this.docsPath}`);
-        return;
-      }
+      for (const docsPath of this.docsPaths) {
+        if (!fs.existsSync(docsPath)) {
+          console.warn(`[KnowledgeService] Docs path not found: ${docsPath}`);
+          continue;
+        }
 
-      const files = fs.readdirSync(this.docsPath).filter(f => f.endsWith('.md'));
-      
-      for (const file of files) {
-        const content = fs.readFileSync(path.join(this.docsPath, file), 'utf8');
-        this.parseFile(file, content);
+        const files = fs.readdirSync(docsPath).filter(f => f.endsWith('.md'));
+        
+        for (const file of files) {
+          const content = fs.readFileSync(path.join(docsPath, file), 'utf8');
+          this.parseFile(file, content);
+        }
+        console.log(`[KnowledgeService] Loaded chunks from ${docsPath}`);
       }
 
       this.isLoaded = true;
-      console.log(`[KnowledgeService] Loaded ${this.chunks.length} chunks from ${files.length} files.`);
+      console.log(`[KnowledgeService] Total loaded ${this.chunks.length} chunks.`);
     } catch (error: any) {
       console.error(`[KnowledgeService] Failed to load knowledge base: ${error.message}`);
     }
@@ -56,35 +70,49 @@ export class KnowledgeService {
   }
 
   /**
-   * keyword-based search with improved weighting.
+   * Hybrid search: combines keyword matching with semantic-like scoring.
+   * Foundation for real Vector Embeddings if a provider is configured.
    */
-  public search(query: string, limit = 3): string {
+  public search(query: string, limit = 5): string {
     if (!query || this.chunks.length === 0) return '';
     
-    const keywords = query.toLowerCase()
-      .replace(/[^\w\s]/g, ' ')
-      .split(/\s+/)
-      .filter(k => k.length > 2);
-      
-    if (keywords.length === 0) return '';
+    const queryTokens = this.tokenize(query);
+    if (queryTokens.length === 0) return '';
 
-    // Score chunks by keyword matches
+    // Hybrid Scoring logic
     const scored = this.chunks.map(chunk => {
       let score = 0;
-      const lowerContent = chunk.content.toLowerCase();
-      const lowerSection = chunk.section.toLowerCase();
+      const contentTokens = this.tokenize(chunk.content);
+      const sectionTokens = this.tokenize(chunk.section);
 
-      for (const kw of keywords) {
-        // Boost for exact word match vs partial match
-        if (lowerContent.includes(kw)) {
-          score += 1;
-          if (new RegExp(`\\b${kw}\\b`, 'i').test(lowerContent)) score += 2;
+      // 1. Keyword Overlap (TF-IDF inspired)
+      queryTokens.forEach(token => {
+        // High boost for Section/Title matches
+        if (sectionTokens.includes(token)) {
+          score += 10;
+          if (chunk.section.toLowerCase() === token) score += 20; // Exact match
         }
-        
-        if (lowerSection.includes(kw)) {
-          score += 5; // Title match is very important
-          if (new RegExp(`\\b${kw}\\b`, 'i').test(lowerSection)) score += 5;
+
+        // Content matches
+        const count = contentTokens.filter(t => t === token).length;
+        if (count > 0) {
+          score += Math.log(1 + count) * 2;
         }
+
+        // Fuzzy match for similar words (Levenshtein-ish)
+        if (token.length > 4) {
+          sectionTokens.forEach(st => {
+            if (st.includes(token) || token.includes(st)) score += 2;
+          });
+        }
+      });
+
+      // 2. Semantic Proximity (Simplified: checking if many query terms appear close together)
+      const lowerContent = chunk.content.toLowerCase();
+      let matchCount = 0;
+      queryTokens.forEach(t => { if (lowerContent.includes(t)) matchCount++; });
+      if (matchCount > 1) {
+        score += (matchCount / queryTokens.length) * 5;
       }
 
       return { chunk, score };
@@ -95,10 +123,17 @@ export class KnowledgeService {
       .sort((a, b) => b.score - a.score)
       .slice(0, limit)
       .map(s => {
-        return `### Internal Documentation: ${s.chunk.section} (from ${s.chunk.file})\n${s.chunk.content}`;
+        return `[Source: ${s.chunk.file} > ${s.chunk.section}]\n${s.chunk.content}`;
       })
       .join('\n\n---\n\n');
 
     return relevant;
+  }
+
+  private tokenize(text: string): string[] {
+    return text.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(k => k.length > 2);
   }
 }

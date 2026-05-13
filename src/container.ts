@@ -34,6 +34,7 @@ import { VaultMigrationService } from './modules/storage/migration/vault-migrati
 import { AIService } from './modules/orchestration/ai.service';
 import { AIOrchestrator } from './modules/orchestration/ai-orchestrator.service';
 import { KnowledgeService } from './modules/knowledge/knowledge.service';
+import { IPromptProvider } from './common/interfaces/prompt.interface';
 
 /**
  * Structured report from the dogfooding migration.
@@ -78,13 +79,15 @@ export class Container {
   public readonly aiService: AIService;
   public readonly aiOrchestrator: AIOrchestrator;
   public readonly knowledge?: KnowledgeService;
+  public readonly promptProvider?: IPromptProvider;
 
   // Sub-orchestrators
   public readonly gitOrchestrator: GitOrchestrator;
   public readonly securityOrchestrator: SecurityOrchestrator;
   public readonly schemaOrchestrator: SchemaOrchestrator;
 
-  private constructor() {
+  private constructor(promptProvider?: IPromptProvider, private readonly onAppEvent?: (event: any) => void) {
+    this.promptProvider = promptProvider;
     this.storage = new StorageService();
     this.config = new ProjectConfigService();
     this.parser = new ParserService();
@@ -100,7 +103,7 @@ export class Container {
     this.mirror = new SchemaMirrorService(this.storage);
     this.dependencySearch = new DependencySearchService();
     // 3. Orchestrators
-    this.gitOrchestrator = new GitOrchestrator(this.mirror);
+    this.gitOrchestrator = new GitOrchestrator(this.mirror, this.config);
     this.securityOrchestrator = new SecurityOrchestrator(this.config, this.driverFactory);
     this.schemaOrchestrator = new SchemaOrchestrator(
       this.config,
@@ -121,7 +124,10 @@ export class Container {
       this.aiService,
       this.config,
       this.schemaOrchestrator,
-      this.storage
+      this.storage,
+      undefined,
+      this.promptProvider,
+      this.onAppEvent
     );
 
     // Patch AIOrchestrator's schemaOrchestrator since it was created earlier
@@ -154,8 +160,12 @@ export class Container {
 
     // Initialize Knowledge Base
     if (projectBaseDir) {
-      const docsPath = path.join(projectBaseDir, 'docs');
-      (this as any).knowledge = new KnowledgeService(docsPath);
+      const userDocsPath = path.join(projectBaseDir, 'docs');
+      const internalDocsPath = path.join(__dirname, '..', '..', 'docs');
+      
+      (this as any).knowledge = new KnowledgeService(userDocsPath);
+      (this as any).knowledge.addPath(internalDocsPath);
+      
       await this.knowledge?.load();
       // Inject knowledge into AIOrchestrator
       (this.aiOrchestrator as any).knowledgeService = this.knowledge;
@@ -234,8 +244,15 @@ export class Container {
               console.warn(`[Dogfooding] ${sql}`);
               details.push(sql.replace('-- WARNING: ', '⚠️ '));
             } else {
-              await destDriver.query(sql);
-              details.push(this.humanizeAlterSQL(sql));
+              try {
+                await destDriver.query(sql);
+                details.push(this.humanizeAlterSQL(sql));
+              } catch (e: any) {
+                console.error(`[Dogfooding] Migration Query Failed: ${sql}`);
+                console.error(`[Dogfooding] Error: ${e.message}`);
+                details.push(`❌ FAILED: ${this.humanizeAlterSQL(sql)} (${e.message})`);
+                // Continue to next statement instead of crashing the whole migration
+              }
             }
           }
           changes.push({ action: 'MODIFIED', table, details });
@@ -299,9 +316,9 @@ export class Container {
   /**
    * Create or retrieve singleton container
    */
-  static async create(strategy: ICoreStorageStrategy, dbPath: string, projectBaseDir?: string): Promise<Container> {
+  static async create(strategy: ICoreStorageStrategy, dbPath: string, projectBaseDir?: string, onAppEvent?: (event: any) => void, promptProvider?: IPromptProvider): Promise<Container> {
     if (this.instance) return this.instance;
-    const container = new Container();
+    const container = new Container(promptProvider, onAppEvent);
     await container.init(strategy, dbPath, projectBaseDir);
     this.instance = container;
     return this.instance;

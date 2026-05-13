@@ -56,9 +56,9 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@the-andb/secrets": "workspace:*",
     "andb-logger": "^1.0.3",
     "better-sqlite3": "^12.4.6",
-    "zod": "^3.23.0",
     "commander": "^11.1.0",
     "diff": "^5.1.0",
     "dotenv": "^17.2.3",
@@ -69,7 +69,8 @@
     "reflect-metadata": "^0.2.2",
     "simple-git": "^3.32.3",
     "ssh2": "^1.15.0",
-    "typeorm": "^0.3.28"
+    "typeorm": "^0.3.28",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",

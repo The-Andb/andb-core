@@ -42,6 +42,21 @@ export class StorageService {
     return this.projectBaseDir;
   }
 
+  public setProjectBaseDir(dir: string, isProjectScoped: boolean = false) {
+    if (dir) {
+      this.projectBaseDir = dir;
+      if (this.strategy) {
+        this.strategy.setProjectBaseDir(dir, isProjectScoped);
+      }
+    }
+  }
+
+  public setActiveProject(name: string) {
+    if (this.strategy) {
+      this.strategy.setActiveProject(name);
+    }
+  }
+
   private ensureStrategy() {
     if (!this.strategy) {
       throw new Error('StorageService cannot be used before it is initialized with a strategy.');
@@ -102,12 +117,12 @@ export class StorageService {
   }
 
   async getDDL(environment: string, database: string, type: string, name: string, databaseType: string = 'mysql') {
-    const rows = await this.ensureStrategy().getDdlExports(environment, database, type, 1);
+    const rows = await this.ensureStrategy().getDdlExports(environment, database, type, 1, databaseType);
     const row = rows.find(r => r.export_name === name);
     return row ? row.ddl_content : null;
   }
   async getDDLObjects(environment: string, database: string, type: string, databaseType: string = 'mysql') {
-    const rows = await this.ensureStrategy().getDdlExports(environment, database, type, undefined);
+    const rows = await this.ensureStrategy().getDdlExports(environment, database, type, undefined, databaseType);
     return rows.map((r: any) => ({
       name: r.export_name,
       content: r.ddl_content,

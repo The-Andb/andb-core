@@ -36,6 +36,7 @@ export * from './modules/search/dependency-search.service';
 export * from './modules/search/search.interface';
 export * from './modules/orchestration/ai.service';
 export * from './modules/orchestration/ai-orchestrator.service';
+export * from './modules/orchestration/secret-prompt-provider';
 export { getWorkspaceSummaryTool } from './modules/orchestration/tools/get-workspace-summary';
 export { getDBStatusTool } from './modules/orchestration/tools/get-db-status';
 export { getObjectDDLTool } from './modules/orchestration/tools/get-object-ddl';

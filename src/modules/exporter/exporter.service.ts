@@ -40,11 +40,6 @@ export class ExporterService {
       const introspection = driver.getIntrospectionService();
       const dbName = connection.config.database || 'default';
 
-      const projectBaseDir = this.storageService.getProjectBaseDir ? this.storageService.getProjectBaseDir() : process.cwd();
-      const baseDir = path.join(projectBaseDir, 'db', envName, connection.type, dbName);
-      this._ensureDir(baseDir);
-      this._ensureDir(path.join(baseDir, 'current-ddl'));
-
       const allTypes = ['TABLE', 'VIEW', 'PROCEDURE', 'FUNCTION', 'TRIGGER', 'EVENT'] as const;
       // If typeFilter is provided and not 'all', only process matching type(s)
       const normalizedFilter = (typeFilter && typeFilter.toLowerCase() !== 'all')
@@ -58,8 +53,6 @@ export class ExporterService {
 
       for (const type of types) {
         const pluralType = `${type}S` as const;
-        const dir = path.join(baseDir, pluralType.toLowerCase());
-        this._ensureDir(dir);
 
         const list = await this._listObjects(introspection, dbName, type, specificName);
         console.log(`📊 [Exporter] ${pluralType}: found ${list.length} objects`);
@@ -91,8 +84,6 @@ export class ExporterService {
               ddl = this.parser.uppercaseKeywords(ddl);
             }
 
-            // Save to file — always write, even if DDL is empty
-            fs.writeFileSync(path.join(dir, `${name}.sql`), ddl || '');
             exportedNames.push(name);
             // Save to storage — always save so it appears in sidebar list
             await this.storageService.saveDDL(envName, dbName, pluralType, name, ddl || '', connection.type);
@@ -120,13 +111,7 @@ export class ExporterService {
           );
         }
 
-        // Save list file for parity with legacy
-        if (!specificName) {
-          fs.writeFileSync(
-            path.join(baseDir, 'current-ddl', `${pluralType.toLowerCase()}.list`),
-            exportedNames.join('\n'),
-          );
-        }
+        // Memory tracker summary
       }
 
 
@@ -222,7 +207,10 @@ export class ExporterService {
       }
 
       const projectBaseDir = this.storageService.getProjectBaseDir ? this.storageService.getProjectBaseDir() : process.cwd();
-      const finalPath = outputPath || path.join(projectBaseDir, 'exports', `${tableName}.${format}`);
+      const currentProject = this.configService.getCurrentProject();
+      const projectName = currentProject?.name ? currentProject.name.replace(/[^a-z0-9_-]/gi, '_').toLowerCase() : 'default';
+      
+      const finalPath = outputPath || path.join(projectBaseDir, 'projects', projectName, 'exports', `${tableName}.${format}`);
       this._ensureDir(path.dirname(finalPath));
       fs.writeFileSync(finalPath, content);
 

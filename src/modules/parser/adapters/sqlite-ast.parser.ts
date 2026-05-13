@@ -2,23 +2,13 @@ import { Parser } from 'node-sql-parser';
 import { ISqlAstParser } from '../interfaces/sql-ast-parser.interface';
 import { ParsedTable, ParsedColumn, ParsedIndex, ParsedForeignKey } from '../interfaces/parsed-table.interface';
 
-export class MysqlAstParser implements ISqlAstParser {
+export class SqliteAstParser implements ISqlAstParser {
   private parser: Parser;
 
   constructor() {
     this.parser = new Parser();
   }
 
-  private extractDefaultValue(defVal: any): string | null {
-    if (!defVal || defVal.value === undefined) return null;
-    return this.unwrapAstValue(defVal.value);
-  }
-
-  /**
-   * Recursively unwrap AST node values from node-sql-parser.
-   * Handles: { type: 'null' }, { type: 'single_quote_string', value: '...' },
-   *          { type: 'number', value: 123 }, { type: 'bool', value: true }, etc.
-   */
   private unwrapAstValue(node: any): string | null {
     if (node === null || node === undefined) return null;
     if (typeof node === 'string') return node;
@@ -35,27 +25,17 @@ export class MysqlAstParser implements ISqlAstParser {
         const funcName = node.name?.name?.[0]?.value || 'FUNC';
         return `${funcName}()`;
       }
-      if (node.type === 'expr_list' || node.type === 'origin') {
-        return node.value != null ? String(node.value) : '';
-      }
-      // Last resort: if value exists, try to unwrap it
       if (node.value !== undefined) return this.unwrapAstValue(node.value);
     }
 
     return null;
   }
 
-  private extractCommentValue(comment: any): string | undefined {
-    if (!comment) return undefined;
-    const result = this.unwrapAstValue(comment);
-    return result ?? undefined;
-  }
-
   parseTableDetailed(ddl: string): ParsedTable | null {
     try {
       if (!ddl || !ddl.toUpperCase().includes('CREATE TABLE')) return null;
       
-      const ast: any = this.parser.astify(ddl, { database: 'MySQL' });
+      const ast: any = this.parser.astify(ddl, { database: 'SQLite' });
       const createTableAst = Array.isArray(ast) ? ast[0] : ast;
       
       if (createTableAst.type !== 'create' || createTableAst.keyword !== 'table') {
@@ -72,13 +52,13 @@ export class MysqlAstParser implements ISqlAstParser {
           const colName = def.column.column;
           const dataType = def.definition.dataType;
           const isNotNull = def.nullable ? def.nullable.value === 'not null' : false;
-          const defVal = this.extractDefaultValue(def.default_val);
+          const defVal = this.unwrapAstValue(def.default_val);
           
+          // Reconstruct a basic definition string for the migrator
           let definition = `${dataType}`;
-          if (def.definition.length) definition += `(${def.definition.length})`;
           if (isNotNull) definition += ' NOT NULL';
           if (defVal !== null) definition += ` DEFAULT ${defVal}`;
-          if (def.auto_increment) definition += ' AUTO_INCREMENT';
+          if (def.auto_increment) definition += ' AUTOINCREMENT';
 
           columns.push({
             name: colName,
@@ -86,35 +66,27 @@ export class MysqlAstParser implements ISqlAstParser {
             length: def.definition.length,
             nullable: !isNotNull,
             defaultValue: defVal,
-            comment: this.extractCommentValue(def.comment),
+            comment: undefined,
             autoIncrement: !!def.auto_increment,
             rawDefinition: definition,
             definition: definition
           } as any);
         } else if (def.resource === 'constraint') {
-           if (def.constraint_type === 'FOREIGN KEY') {
-              let onDelete, onUpdate;
-              if (def.reference_definition.on_action) {
-                 def.reference_definition.on_action.forEach((action: any) => {
-                    if (action.type === 'on delete') onDelete = action.value?.value;
-                    if (action.type === 'on update') onUpdate = action.value?.value;
-                 });
-              }
-
+           if (def.constraint_type === 'foreign key') {
+              const name = def.constraint || `fk_${Math.random().toString(36).substring(7)}`;
               const cols = def.definition.map((c: any) => c.column);
               const refTable = def.reference_definition.table[0].table;
               const refCols = def.reference_definition.definition.map((c: any) => c.column);
-              const name = def.constraint || `fk_${Math.random().toString(36).substring(7)}`;
-
-              const definition = `CONSTRAINT \`${name}\` FOREIGN KEY (\`${cols.join('`, `')}\`) REFERENCES \`${refTable}\` (\`${refCols.join('`, `')}\`)`;
+              
+              const definition = `FOREIGN KEY(${cols.join(', ')}) REFERENCES ${refTable}(${refCols.join(', ')})`;
 
               foreignKeys.push({
                  name,
                  columns: cols,
                  refTable,
                  refColumns: refCols,
-                 onDelete,
-                 onUpdate,
+                 onDelete: undefined,
+                 onUpdate: undefined,
                  rawDefinition: definition,
                  definition: definition
               } as any);
@@ -124,11 +96,15 @@ export class MysqlAstParser implements ISqlAstParser {
               const isUnique = type === 'unique' || type === 'unique key';
               const cols = def.definition.map((c: any) => c.column);
               const name = def.index || def.constraint || (isPk ? 'PRIMARY' : `idx_${Math.random().toString(36).substring(7)}`);
-
+              
               let definition = '';
-              if (isPk) definition = `PRIMARY KEY (\`${cols.join('`, `')}\`)`;
-              else if (isUnique) definition = `UNIQUE KEY \`${name}\` (\`${cols.join('`, `')}\`)`;
-              else definition = `KEY \`${name}\` (\`${cols.join('`, `')}\`)`;
+              if (isPk) {
+                definition = `PRIMARY KEY (${cols.join(', ')})`;
+              } else if (isUnique) {
+                definition = `CREATE UNIQUE INDEX "${name}" ON "${tableName}" (${cols.join(', ')})`;
+              } else {
+                definition = `CREATE INDEX "${name}" ON "${tableName}" (${cols.join(', ')})`;
+              }
 
               indexes.push({
                  name,
@@ -141,45 +117,21 @@ export class MysqlAstParser implements ISqlAstParser {
         }
       }
       
-      const options: any = {};
-      if (createTableAst.table_options) {
-        for (const opt of createTableAst.table_options) {
-           options[opt.keyword.toLowerCase()] = opt.value?.value || opt.value;
-        }
-      }
-      
       return {
         tableName,
         columns,
         indexes,
         foreignKeys,
-        options,
+        options: {},
         partitions: null,
         rawSql: ddl
       };
     } catch (err) {
-      // Gracefully fallback to regex parser
-      // console.debug('AST parser failed for table, falling back to regex. Error:', (err as Error).message);
       return null;
     }
   }
 
   cleanDefiner(ddl: string): string {
-    if (!ddl) return '';
-    const userPart = `(?:'[^']+'|\`[^\`]+\`|"[^"]+"|[a-zA-Z0-9_]+)`;
-    const hostPart = `(?:@(?:'[^']+'|\`[^\`]+\`|"[^"]+"|[a-zA-Z0-9_\\.\%]+))?`;
-    const definerPattern = `DEFINER\\s*=\\s*${userPart}${hostPart}`;
-    
-    const beginMatch = ddl.match(/(\s)BEGIN(\s|$)/i);
-    if (beginMatch && beginMatch.index !== undefined) {
-      let header = ddl.substring(0, beginMatch.index).trim();
-      const body = ddl.substring(beginMatch.index).trim();
-      const re = new RegExp(definerPattern, 'gi');
-      header = header.replace(re, '').replace(/\s{2,}/g, ' ');
-      return header + ' ' + body;
-    }
-    
-    const reFallback = new RegExp(definerPattern, 'gi');
-    return ddl.replace(reFallback, '');
+    return ddl; // SQLite doesn't have DEFINER
   }
 }

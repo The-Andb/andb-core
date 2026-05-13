@@ -87,6 +87,8 @@ export class OrchestrationService {
         return await this.schemaOrchestrator.getServerInfo(payload);
       case 'getFKGraph':
         return await this.schemaOrchestrator.getFKGraph(payload);
+      case 'executeQuery':
+        return await this.schemaOrchestrator.executeQuery(payload);
 
       // AI DBA Operations
       case 'ai-configure':
@@ -102,6 +104,11 @@ export class OrchestrationService {
   }
 
   private syncConfigWithPayload(payload: any) {
+    if (payload.__projectBaseDir && this.schemaOrchestrator?.storageService) {
+      this.logger.info(`Updating Core context project base directory to: ${payload.__projectBaseDir}`);
+      this.schemaOrchestrator.storageService.setProjectBaseDir(payload.__projectBaseDir, true);
+    }
+
     if (payload.sourceConfig && payload.srcEnv) {
       this.configService.setConnection(
         payload.srcEnv,

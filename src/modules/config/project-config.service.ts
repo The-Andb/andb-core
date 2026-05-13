@@ -39,6 +39,7 @@ export class ProjectConfigService {
       }
 
       this.activeProjectId = defaultProject.id;
+      this.storageService.setActiveProject(defaultProject.name);
       
       // 2. Fetch all environments 
       const envs = await this.storageService.getProjectEnvironments(defaultProject.id);
@@ -187,6 +188,46 @@ export class ProjectConfigService {
 
   getIsNotMigrateCondition(): string | null {
     return this.config.isNotMigrateCondition || null;
+  }
+
+  getActiveProjectId(): string | null {
+    return this.activeProjectId;
+  }
+
+  setActiveProjectId(id: string) {
+    this.activeProjectId = id;
+    this.logger.info(`ProjectConfigService: Active project switched to ${id}`);
+
+    if (this.storageService) {
+      const project = this.getCurrentProject();
+      if (project && project.name) {
+        this.storageService.setActiveProject(project.name);
+      }
+    }
+  }
+
+  getProjects(): any[] {
+    return this.config.projects || [];
+  }
+
+  getCurrentProject(): any | null {
+    if (!this.activeProjectId) return null;
+    return this.getProjects().find((p: any) => p.id === this.activeProjectId) || null;
+  }
+
+  async reload() {
+    try {
+      const projects = await this.storageService.getProjects();
+      this.config.projects = projects;
+      this.logger.info(`ProjectConfigService reloaded. Found ${projects.length} projects.`);
+      
+      // Update active project if it was lost or not set
+      if (!this.activeProjectId && projects.length > 0) {
+        this.activeProjectId = projects[0].id;
+      }
+    } catch (e: any) {
+      this.logger.error(`Failed to reload ProjectConfigService: ${e.message}`);
+    }
   }
 
   saveConfig() {

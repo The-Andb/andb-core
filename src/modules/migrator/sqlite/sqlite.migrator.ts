@@ -35,12 +35,17 @@ export class SqliteMigrator implements IMigrator {
     // SQLite typically requires separate ALTER TABLE statements for each operation.
     // ADD COLUMN
     addColumns.forEach((op: IDiffOperation) => {
-      statements.push(`ALTER TABLE "${tableName}" ADD COLUMN ${op.definition};`);
+      if (op.definition && typeof op.definition === 'string') {
+        statements.push(`ALTER TABLE "${tableName}" ADD COLUMN ${op.definition};`);
+      } else if (op.definition) {
+        console.warn(`[SqliteMigrator] Skipping ADD COLUMN "${op.name}" because definition is not a string:`, op.definition);
+      }
     });
 
     // DROP COLUMN (Supported in SQLite 3.35.0+)
     dropColumns.forEach((op: IDiffOperation) => {
-      statements.push(`ALTER TABLE "${tableName}" DROP COLUMN "${op.name}";`);
+      const colName = op.name.startsWith('"') && op.name.endsWith('"') ? op.name : `"${op.name}"`;
+      statements.push(`ALTER TABLE "${tableName}" DROP COLUMN ${colName};`);
     });
 
     // MODIFY COLUMN is not directly supported by SQLite ALTER TABLE.
@@ -55,7 +60,15 @@ export class SqliteMigrator implements IMigrator {
 
     // ADD INDEX
     addIndexes.forEach((op: IDiffOperation) => {
-      statements.push(op.definition!.endsWith(';') ? op.definition! : op.definition! + ';');
+      if (op.name === 'PRIMARY') {
+        statements.push(`-- WARNING: SQLite does not support adding/modifying PRIMARY KEY via ALTER TABLE. Table recreation is required.`);
+        return;
+      }
+      if (op.definition && typeof op.definition === 'string') {
+        statements.push(op.definition.endsWith(';') ? op.definition : op.definition + ';');
+      } else if (op.definition) {
+        console.warn(`[SqliteMigrator] Skipping ADD INDEX "${op.name}" because definition is not a string:`, op.definition);
+      }
     });
 
     return statements;

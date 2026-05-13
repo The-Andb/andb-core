@@ -7,14 +7,30 @@ export class PostgresIntrospectionService implements IIntrospectionService {
     private readonly parser: ParserService
   ) { }
 
+  private targetSchema: string = 'public';
+
+  setSchema(schema: string) {
+    this.targetSchema = schema;
+  }
+
+  async listSchemas(): Promise<string[]> {
+    const rows = await this.driver.query(`
+      SELECT nspname as schema_name
+      FROM pg_namespace
+      WHERE nspname NOT LIKE 'pg_%' AND nspname != 'information_schema'
+      ORDER BY nspname
+    `);
+    return rows.map((r: any) => r.schema_name);
+  }
+
   async listTables(dbName: string): Promise<string[]> {
     const rows = await this.driver.query(`
       SELECT table_name 
       FROM information_schema.tables 
-      WHERE table_schema = 'public' 
+      WHERE table_schema = $1 
       AND table_type = 'BASE TABLE'
       ORDER BY table_name
-    `);
+    `, [this.targetSchema]);
     return rows.map((r: any) => r.table_name);
   }
 
@@ -22,9 +38,9 @@ export class PostgresIntrospectionService implements IIntrospectionService {
     const rows = await this.driver.query(`
       SELECT table_name 
       FROM information_schema.views 
-      WHERE table_schema = 'public'
+      WHERE table_schema = $1
       ORDER BY table_name
-    `);
+    `, [this.targetSchema]);
     return rows.map((r: any) => r.table_name);
   }
 
@@ -32,10 +48,10 @@ export class PostgresIntrospectionService implements IIntrospectionService {
     const rows = await this.driver.query(`
       SELECT routine_name 
       FROM information_schema.routines 
-      WHERE routine_schema = 'public' 
+      WHERE routine_schema = $1 
       AND routine_type = 'PROCEDURE'
       ORDER BY routine_name
-    `);
+    `, [this.targetSchema]);
     return rows.map((r: any) => r.routine_name);
   }
 
@@ -43,10 +59,10 @@ export class PostgresIntrospectionService implements IIntrospectionService {
     const rows = await this.driver.query(`
       SELECT routine_name 
       FROM information_schema.routines 
-      WHERE routine_schema = 'public' 
+      WHERE routine_schema = $1 
       AND routine_type = 'FUNCTION'
       ORDER BY routine_name
-    `);
+    `, [this.targetSchema]);
     return rows.map((r: any) => r.routine_name);
   }
 
@@ -54,14 +70,25 @@ export class PostgresIntrospectionService implements IIntrospectionService {
     const rows = await this.driver.query(`
       SELECT trigger_name 
       FROM information_schema.triggers 
-      WHERE trigger_schema = 'public'
+      WHERE trigger_schema = $1
       ORDER BY trigger_name
-    `);
+    `, [this.targetSchema]);
     return rows.map((r: any) => r.trigger_name);
   }
 
   async listEvents(dbName: string): Promise<string[]> {
     return []; // Postgres doesn't have "Events" like MySQL
+  }
+
+  async listEnums(dbName: string): Promise<string[]> {
+    const rows = await this.driver.query(`
+      SELECT t.typname as enum_name
+      FROM pg_type t
+      JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE n.nspname = $1 AND t.typtype = 'e'
+      ORDER BY t.typname
+    `, [this.targetSchema]);
+    return rows.map((r: any) => r.enum_name);
   }
 
   async getTableDDL(dbName: string, tableName: string): Promise<string> {
@@ -75,16 +102,16 @@ export class PostgresIntrospectionService implements IIntrospectionService {
         numeric_precision,
         numeric_scale
       FROM information_schema.columns
-      WHERE table_name = $1 AND table_schema = 'public'
+      WHERE table_name = $1 AND table_schema = $2
       ORDER BY ordinal_position
-    `, [tableName]);
+    `, [tableName, this.targetSchema]);
 
     const pks = await this.driver.query(`
       SELECT kcu.column_name
       FROM information_schema.table_constraints tc
       JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
-      WHERE tc.table_name = $1 AND tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public'
-    `, [tableName]);
+      WHERE tc.table_name = $1 AND tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = $2
+    `, [tableName, this.targetSchema]);
 
     const pkColumns = pks.map((p: any) => p.column_name);
 
@@ -112,6 +139,33 @@ export class PostgresIntrospectionService implements IIntrospectionService {
       colDefs.push(`  PRIMARY KEY (${pkColumns.join(', ')})`);
     }
 
+    // Add Foreign Keys in CREATE TABLE
+    const fks = await this.driver.query(`
+      SELECT
+        kcu.column_name, 
+        ccu.table_name AS foreign_table_name,
+        ccu.column_name AS foreign_column_name 
+      FROM information_schema.table_constraints AS tc 
+      JOIN information_schema.key_column_usage AS kcu ON tc.constraint_name = kcu.constraint_name
+      JOIN information_schema.constraint_column_usage AS ccu ON ccu.constraint_name = tc.constraint_name
+      WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = $1 AND tc.table_schema = $2
+    `, [tableName, this.targetSchema]);
+
+    fks.forEach((fk: any) => {
+      colDefs.push(`  FOREIGN KEY (${fk.column_name}) REFERENCES ${fk.foreign_table_name}(${fk.foreign_column_name})`);
+    });
+
+    // Add CHECK Constraints
+    const checks = await this.driver.query(`
+      SELECT conname, pg_get_constraintdef(oid) as def
+      FROM pg_constraint
+      WHERE contype = 'c' AND conrelid = (SELECT oid FROM pg_class WHERE relname = $1 AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2))
+    `, [tableName, this.targetSchema]);
+
+    checks.forEach((check: any) => {
+      colDefs.push(`  CONSTRAINT ${check.conname} ${check.def}`);
+    });
+
     ddl += colDefs.join(',\n');
     ddl += '\n);';
 
@@ -119,8 +173,8 @@ export class PostgresIntrospectionService implements IIntrospectionService {
     const indexes = await this.driver.query(`
       SELECT indexdef 
       FROM pg_indexes 
-      WHERE tablename = $1 AND schemaname = 'public'
-    `, [tableName]);
+      WHERE tablename = $1 AND schemaname = $2
+    `, [tableName, this.targetSchema]);
 
     for (const idx of indexes) {
       if (!idx.indexdef.includes('_pkey')) { // Skip PK index as it's in CREATE TABLE
@@ -135,8 +189,8 @@ export class PostgresIntrospectionService implements IIntrospectionService {
     const rows = await this.driver.query(`
       SELECT view_definition 
       FROM information_schema.views 
-      WHERE table_name = $1 AND table_schema = 'public'
-    `, [viewName]);
+      WHERE table_name = $1 AND table_schema = $2
+    `, [viewName, this.targetSchema]);
     return rows[0] ? `CREATE VIEW ${viewName} AS\n${rows[0].view_definition}` : "";
   }
 
@@ -153,8 +207,8 @@ export class PostgresIntrospectionService implements IIntrospectionService {
       SELECT pg_get_functiondef(p.oid) as definition
       FROM pg_proc p
       JOIN pg_namespace n ON p.pronamespace = n.oid
-      WHERE p.proname = $1 AND n.nspname = 'public'
-    `, [name]);
+      WHERE p.proname = $1 AND n.nspname = $2
+    `, [name, this.targetSchema]);
     return rows[0] ? rows[0].definition : "";
   }
 
@@ -165,6 +219,20 @@ export class PostgresIntrospectionService implements IIntrospectionService {
       WHERE t.tgname = $1
     `, [triggerName]);
     return rows[0] ? rows[0].definition : "";
+  }
+
+  async getEnumDDL(dbName: string, enumName: string): Promise<string> {
+    const rows = await this.driver.query(`
+      SELECT e.enumlabel
+      FROM pg_enum e
+      JOIN pg_type t ON e.enumtypid = t.oid
+      WHERE t.typname = $1
+      ORDER BY e.enumsortorder
+    `, [enumName]);
+    
+    if (rows.length === 0) return "";
+    const values = rows.map((r: any) => `'${r.enumlabel}'`).join(', ');
+    return `CREATE TYPE ${enumName} AS ENUM (${values});`;
   }
 
   async getEventDDL(dbName: string, eventName: string): Promise<string> {
@@ -182,6 +250,8 @@ export class PostgresIntrospectionService implements IIntrospectionService {
       case 'PROCEDURE': return this.getProcedureDDL(dbName, name);
       case 'FUNCTION': return this.getFunctionDDL(dbName, name);
       case 'TRIGGER': return this.getTriggerDDL(dbName, name);
+      case 'TYPE':
+      case 'ENUM': return this.getEnumDDL(dbName, name);
       default: return "";
     }
   }
@@ -190,9 +260,9 @@ export class PostgresIntrospectionService implements IIntrospectionService {
     const rows = await this.driver.query(`
       SELECT column_name, data_type, is_nullable, column_default
       FROM information_schema.columns
-      WHERE table_name = $1 AND table_schema = 'public'
+      WHERE table_name = $1 AND table_schema = $2
       ORDER BY ordinal_position
-    `, [tableName]);
+    `, [tableName, this.targetSchema]);
     return rows.map((r: any) => ({
       name: r.column_name,
       type: r.data_type,
@@ -208,8 +278,9 @@ export class PostgresIntrospectionService implements IIntrospectionService {
         n_live_tup as row_count,
         pg_total_relation_size(relid) as total_size
       FROM pg_stat_user_tables
+      WHERE schemaname = $1
       ORDER BY n_live_tup DESC
-    `);
+    `, [this.targetSchema]);
     return rows.map((r: any) => ({
       name: r.table_name,
       rowCount: parseInt(r.row_count),
@@ -242,8 +313,8 @@ export class PostgresIntrospectionService implements IIntrospectionService {
         JOIN information_schema.constraint_column_usage AS ccu
           ON ccu.constraint_name = tc.constraint_name
           AND ccu.table_schema = tc.table_schema
-      WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public'
-    `);
+      WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = $1
+    `, [this.targetSchema]);
     return rows;
   }
 }

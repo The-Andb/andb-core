@@ -10,7 +10,15 @@ export class GitService {
   private currentConfig: IGitConfig | null = null;
 
   async initialize(config: IGitConfig) {
+    if (!config) {
+      throw new Error('Git configuration is required but was undefined.');
+    }
     this.currentConfig = config;
+    
+    // Safeguard: Force Git into non-interactive headless mode to prevent process hangs on credentials
+    process.env.GIT_TERMINAL_PROMPT = '0';
+    process.env.GIT_ASKPASS = 'echo';
+    
     const baseDir = config.storagePath || require('path').join(require('os').homedir(), '.andb', 'git-storage');
 
     if (!fs.existsSync(baseDir)) {
@@ -22,9 +30,13 @@ export class GitService {
       binary: 'git',
       maxConcurrentProcesses: 6,
       trimmed: false,
+      timeout: {
+        block: 10000 // 10 seconds process block safeguard to keep engine responsive
+      }
     };
 
     this.git = simpleGit(options);
+    this.logger.info(`GitService initialised at ${baseDir}`);
 
     const isRepo = await this.git.checkIsRepo();
     if (!isRepo) {

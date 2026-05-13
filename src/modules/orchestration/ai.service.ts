@@ -1,36 +1,46 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+// @ts-ignore
 const { getLogger } = require('andb-logger');
 
 export class AIService {
   private readonly logger = getLogger({ logName: 'AIService' });
-  private genAI: any = null;
+  private genAI: GoogleGenerativeAI | null = null;
   private modelName: string = 'gemini-1.5-flash';
+  private provider: string = 'gemini';
   private apiKey: string | null = null;
   private availableModels: string[] = [];
 
   public configure(apiKey: string, provider: string = 'gemini', modelName?: string) {
     this.apiKey = apiKey;
+    this.provider = provider;
     
     // Normalize model name
-    let internalModelName = modelName || 'gemini-1.5-flash';
-    if (internalModelName.includes('gemini-2.0-flash')) {
-      // Force fallback because gemini-2.0-flash throws 404 for new users
-      internalModelName = 'gemini-1.5-flash';
-    } else if (internalModelName.includes('gemini-1.5-flash')) {
-      internalModelName = 'gemini-1.5-flash';
+    let internalModelName = modelName;
+    
+    if (provider === 'gemini') {
+      internalModelName = internalModelName || 'gemini-1.5-flash';
+      if (internalModelName.includes('gemini-2.0-flash')) {
+        internalModelName = 'gemini-1.5-flash';
+      }
+    } else if (provider === 'openai') {
+      internalModelName = internalModelName || 'gpt-4o';
+    } else if (provider === 'anthropic') {
+      internalModelName = internalModelName || 'claude-3-5-sonnet-20240620';
     }
     
-    this.modelName = internalModelName;
+    this.modelName = internalModelName || 'unknown';
 
     if (provider === 'gemini') {
       try {
         this.genAI = new GoogleGenerativeAI(apiKey);
-        this.logger.info(`✨ AI Service configured (Model: ${this.modelName})`);
+        this.logger.info(`✨ Gemini configured (Model: ${this.modelName})`);
         this.discoverModels();
       } catch (e: any) {
-        this.logger.error('Failed to initialize AI Service:', e.message);
+        this.logger.error('Failed to initialize Gemini:', e.message);
         throw e;
       }
+    } else {
+      this.logger.info(`✨ ${provider.toUpperCase()} configured (Model: ${this.modelName})`);
     }
   }
 
@@ -48,11 +58,21 @@ export class AIService {
     }
   }
 
-  public async ask(question: string, context?: any, tools?: any[]): Promise<string> {
+  public async ask(question: string, context?: any, tools?: any[], systemInstruction?: string): Promise<string> {
     if (!this.apiKey) {
       throw new Error('AI Service not configured. Please provide an API Key first.');
     }
 
+    // Route to specialized providers
+    if (this.provider === 'openai') {
+      return this.askOpenAI(question, context, systemInstruction);
+    }
+    
+    if (this.provider === 'anthropic') {
+      return this.askAnthropic(question, context, systemInstruction);
+    }
+
+    // Default to Gemini Strategy (Legacy/Main)
     // Dynamic model discovery fallback
     if (this.availableModels.length === 0) {
       await this.discoverModels();
@@ -79,31 +99,110 @@ export class AIService {
       parameters: this.zodToGeminiSchema(t.inputSchema)
     }));
 
-    let messages = [
-      {
-        role: 'user',
-        parts: [{ text: `${question}\n\nContext:\n${JSON.stringify(context || {}, null, 2)}` }]
-      }
-    ];
-
     try {
-      return await this.executeChatLoop(this.modelName, messages, toolDeclarations, tools);
+      let messages = [
+        {
+          role: 'user',
+          parts: [{ text: `${question}\n\nContext:\n${JSON.stringify(context || {}, null, 2)}` }]
+        }
+      ];
+
+      return await this.executeChatLoop(this.modelName, messages, toolDeclarations, tools, systemInstruction);
     } catch (error: any) {
       this.logger.error(`AI execution error: ${error.message}`);
       throw error;
     }
   }
 
-  private async executeChatLoop(model: string, messages: any[], toolDeclarations?: any[], tools?: any[]): Promise<string> {
+  private async askOpenAI(question: string, context?: any, systemInstruction?: string): Promise<string> {
+    const url = 'https://api.openai.com/v1/chat/completions';
+    const messages = [];
+    
+    if (systemInstruction) {
+      messages.push({ role: 'system', content: systemInstruction });
+    }
+    
+    messages.push({ 
+      role: 'user', 
+      content: `${question}\n\nContext:\n${JSON.stringify(context || {}, null, 2)}` 
+    });
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`
+      },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages,
+        temperature: 0.2
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`OpenAI Error ${response.status}: ${err}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || 'No response from OpenAI';
+  }
+
+  private async askAnthropic(question: string, context?: any, systemInstruction?: string): Promise<string> {
+    const url = 'https://api.anthropic.com/v1/messages';
+    
+    const body: any = {
+      model: this.modelName,
+      max_tokens: 2048,
+      messages: [
+        { 
+          role: 'user', 
+          content: `${question}\n\nContext:\n${JSON.stringify(context || {}, null, 2)}` 
+        }
+      ],
+      temperature: 0.2
+    };
+
+    if (systemInstruction) {
+      body.system = systemInstruction;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.apiKey || '',
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Anthropic Error ${response.status}: ${err}`);
+    }
+
+    const data = await response.json();
+    return data.content?.[0]?.text || 'No response from Anthropic';
+  }
+
+  private async executeChatLoop(model: string, messages: any[], toolDeclarations?: any[], tools?: any[], systemInstruction?: string): Promise<string> {
     const maxIterations = 5;
     let currentIteration = 0;
 
     while (currentIteration < maxIterations) {
-      const payload = {
+      const payload: any = {
         contents: messages,
         tools: toolDeclarations ? [{ functionDeclarations: toolDeclarations }] : [],
         generationConfig: { temperature: 0.2, maxOutputTokens: 2048 }
       };
+
+      if (systemInstruction) {
+        payload.systemInstruction = {
+          parts: [{ text: systemInstruction }]
+        };
+      }
 
       const data = await this.callGeminiApi(model, payload);
       const candidate = data.candidates?.[0];
@@ -155,18 +254,49 @@ export class AIService {
   private async callGeminiApi(model: string, payload: any): Promise<any> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
     
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    let lastError: any = null;
+    const maxRetries = 3;
+    const baseDelay = 1000;
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Google AI API Error ${response.status}: ${errorBody}`);
+    for (let i = 0; i <= maxRetries; i++) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+          return await response.json();
+        }
+
+        const errorBody = await response.text();
+        lastError = new Error(`Google AI API Error ${response.status}: ${errorBody}`);
+        
+        // Only retry on transient errors (429: Rate Limit, 500: Internal, 503: Service Unavailable, 504: Gateway Timeout)
+        if (![429, 500, 503, 504].includes(response.status)) {
+          throw lastError;
+        }
+
+        if (i < maxRetries) {
+          const delay = baseDelay * Math.pow(2, i);
+          this.logger.warn(`⚠️ Gemini API transient error (${response.status}). Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      } catch (e: any) {
+        lastError = e;
+        // Network errors (fetch failed) should also be retried
+        if (i < maxRetries && (e.message.includes('fetch') || e.message.includes('network') || e.message.includes('ETIMEDOUT'))) {
+          const delay = baseDelay * Math.pow(2, i);
+          this.logger.warn(`🌐 Network error. Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        throw e;
+      }
     }
 
-    return await response.json();
+    throw lastError;
   }
 
   private zodToGeminiSchema(zodSchema: any): any {

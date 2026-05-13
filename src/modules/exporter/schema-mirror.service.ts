@@ -12,14 +12,14 @@ export class SchemaMirrorService {
   /**
    * Mirrors the SQLite state to the filesystem in the specified base directory.
    */
-  async mirrorToFilesystem(envName: string, dbName: string, baseDir: string) {
-    this.logger.info(`mirroring ${envName}/${dbName} to ${baseDir}`);
+  async mirrorToFilesystem(envName: string, dbName: string, baseDir: string, databaseType: string = 'mysql') {
+    this.logger.info(`mirroring ${envName}/${dbName} [${databaseType}] to ${baseDir}`);
 
     const types = ['TABLES', 'VIEWS', 'PROCEDURES', 'FUNCTIONS', 'TRIGGERS', 'EVENTS'];
 
     for (const type of types) {
-      const objects = await this.storageService.getDDLObjects(envName, dbName, type);
-      const targetDir = path.join(baseDir, envName, dbName, type.toLowerCase());
+      const objects = await this.storageService.getDDLObjects(envName, dbName, type, databaseType);
+      const targetDir = path.join(baseDir, envName, databaseType.toLowerCase(), dbName, type.toLowerCase());
 
       this._ensureDir(targetDir);
 

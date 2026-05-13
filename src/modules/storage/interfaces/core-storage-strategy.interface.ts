@@ -13,6 +13,13 @@ import {
 export interface ICoreStorageStrategy {
   // --- Lifecycle ---
   initialize(dbPath: string, extraEntities?: any[], projectBaseDir?: string): Promise<void>;
+  /**
+   * Set the active storage working directory.
+   * @param dir 
+   * @param isProjectScoped If true, signals that this directory is already isolated to a specific project, disabling sub-folder scoping.
+   */
+  setProjectBaseDir(dir: string, isProjectScoped?: boolean): void;
+  setActiveProject(name: string): void;
   close(): Promise<void>;
 
   // --- Projects ---
@@ -37,7 +44,7 @@ export interface ICoreStorageStrategy {
 
   // --- Exports ---
   saveDdlExport(exportData: DdlExport): Promise<void>;
-  getDdlExports(env: string, dbName: string, type?: string, limit?: number): Promise<DdlExport[]>;
+  getDdlExports(env: string, dbName: string, type?: string, limit?: number, databaseType?: string): Promise<DdlExport[]>;
   deleteDdlExport(env: string, dbName: string, type: string, name: string): Promise<void>;
 
   // --- Snapshots ---

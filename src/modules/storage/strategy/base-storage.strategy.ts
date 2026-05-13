@@ -20,10 +20,13 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
   protected dataSource: DataSource | null = null;
   protected dbPath: string = '';
   protected projectBaseDir: string = process.cwd();
+  protected activeProjectName: string = 'default';
+  protected isProjectScoped: boolean = false;
 
   public getDataSource() {
     return this.dataSource;
   }
+
 
   /**
    * Initialize the SQLite Data Source.
@@ -32,7 +35,7 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
   async initialize(dbPath: string, extraEntities: any[] = [], projectBaseDir?: string): Promise<void> {
     this.dbPath = dbPath;
     if (projectBaseDir) {
-      this.projectBaseDir = projectBaseDir;
+      this.setProjectBaseDir(projectBaseDir);
     }
 
     // Ensure dir exists
@@ -240,6 +243,46 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
   }
 
 
+  public setProjectBaseDir(dir: string, isProjectScoped: boolean = false): void {
+    if (dir) {
+      this.projectBaseDir = dir;
+      this.isProjectScoped = isProjectScoped;
+    }
+  }
+
+  public setActiveProject(name: string): void {
+    if (name) {
+      // Sanitize for filesystem pathing
+      this.activeProjectName = name.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+    } else {
+      this.activeProjectName = 'default';
+    }
+  }
+
+  protected _getScopedPath(relativePath: string): string {
+    // Deterministic short-circuit: If strategy is flagged as running INSIDE an isolated folder,
+    // NEVER scope it, write to current folder directly.
+    if (this.isProjectScoped) {
+       return relativePath;
+    }
+
+    // Central router for filesystem paths scoped by Project
+    if (this.activeProjectName && this.activeProjectName !== 'default') {
+       const scopedSegment = path.join('projects', this.activeProjectName);
+       
+       // Safety normalization fallback check (Legacy Safeguard)
+       const normalizedBase = this.projectBaseDir.replace(/[\\\/]/g, '/').replace(/\/$/, '');
+       const normalizedSegment = scopedSegment.replace(/[\\\/]/g, '/').replace(/\/$/, '');
+       
+       if (normalizedBase.endsWith(normalizedSegment)) {
+         return relativePath;
+       }
+       
+       return path.join(scopedSegment, relativePath);
+    }
+    return relativePath;
+  }
+
   async close(): Promise<void> {
     if (this.dataSource && this.dataSource.isInitialized) {
       await this.dataSource.destroy();
@@ -278,8 +321,30 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
   }
 
   async getProjects(): Promise<Project[]> {
+    if (!this.ds || !this.ds.isInitialized) return [];
+
+    // Attempt to load from GUI preferences first (Desktop mode)
+    try {
+      const guiPrefRows = await this.ds.query("SELECT value FROM gui_preferences WHERE key = 'projects'");
+      if (guiPrefRows && guiPrefRows.length > 0) {
+        const guiProjects = JSON.parse(guiPrefRows[0].value);
+        if (Array.isArray(guiProjects) && guiProjects.length > 0) {
+          // Map GUI projects to Core Project interface for compatibility
+          return guiProjects.map(gp => ({
+            id: gp.id,
+            name: gp.name,
+            description: gp.description || '',
+            is_favorite: gp.isActive ? 1 : 0,
+            ...gp // Pass everything through
+          })) as any[];
+        }
+      }
+    } catch (e) {
+      // gui_preferences table might not exist in CLI-only mode or first run
+    }
+
     const repo = this.ds.getRepository(ProjectEntity);
-    return await repo.find({ order: { order_index: 'ASC', created_at: 'DESC' } });
+    return await repo.find({ order: { order_index: 'ASC', created_at: 'DESC' } }) as any[];
   }
 
   async deleteProject(id: string): Promise<void> {
@@ -343,7 +408,8 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
   async saveDdlExport(exportData: DdlExport): Promise<void> {
     const extType = (exportData.export_type || 'unknown').toLowerCase();
     const dbType = (exportData.database_type || 'mysql').toLowerCase();
-    const relPath = `db/${exportData.environment}/${dbType}/${exportData.database_name}/${extType}/${exportData.export_name}.sql`;
+    const baseRelPath = `${exportData.environment}/${dbType}/${exportData.database_name}/${extType}/${exportData.export_name}.sql`;
+    const relPath = this._getScopedPath(baseRelPath);
 
     if (exportData.ddl_content) {
       this._writeSqlFile(relPath, exportData.ddl_content);
@@ -351,7 +417,10 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
       exportData.ddl_content = ''; // Clear so we don't save massive text to SQLite
     }
 
-    await this.ds.getRepository(DdlExportEntity).save({ ...exportData, updated_at: new Date() } as any);
+    await this.ds.getRepository(DdlExportEntity).upsert(
+      { ...exportData, updated_at: new Date() } as any,
+      ['environment', 'database_name', 'export_type', 'export_name', 'database_type']
+    );
   }
 
   async getDdlExports(env: string, dbName: string, type?: string, limit?: number, databaseType?: string): Promise<DdlExport[]> {
@@ -389,7 +458,8 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
   async saveSnapshot(snapshot: DdlSnapshot): Promise<void> {
     const extType = (snapshot.ddl_type || 'unknown').toLowerCase();
     const dbType = (snapshot.database_type || 'mysql').toLowerCase();
-    const relPath = `db/${snapshot.environment}/${dbType}/${snapshot.database_name}/.snapshots/${extType}/${snapshot.ddl_name}.sql`;
+    const baseRelPath = `${snapshot.environment}/${dbType}/${snapshot.database_name}/.snapshots/${extType}/${snapshot.ddl_name}.sql`;
+    const relPath = this._getScopedPath(baseRelPath);
 
     if (snapshot.ddl_content) {
       this._writeSqlFile(relPath, snapshot.ddl_content);
@@ -473,7 +543,8 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
 
       console.log(`[StorageStrategy] Extracted alters - col: ${colAlters.length}, idx: ${idxAlters.length}, rmvCol: ${rmvColAlters.length}`);
 
-      const basePath = `map-migrate/${comparison.source_env}-to-${comparison.target_env}/${dbType}/${comparison.database_name}/${extType}/alters`;
+      const baseMigrationPath = `map-migrate/${comparison.source_env}-to-${comparison.target_env}/${dbType}/${comparison.database_name}/${extType}/alters`;
+      const basePath = this._getScopedPath(baseMigrationPath);
 
       if (extType === 'tables') {
         if (colAlters.length > 0) {
@@ -491,7 +562,10 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
       comparison.alter_statements = '';
     }
 
-    await this.ds.getRepository(ComparisonEntity).save({ ...comparison, compared_at: new Date() } as any);
+    await this.ds.getRepository(ComparisonEntity).upsert(
+      { ...comparison, compared_at: new Date() } as any,
+      ['source_env', 'target_env', 'database_name', 'ddl_type', 'ddl_name', 'database_type']
+    );
   }
 
   private _hydrateComparisonTarget(r: any) {
