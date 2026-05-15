@@ -307,10 +307,44 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
 
   protected _readSqlFile(relativePath: string): string {
     if (!relativePath) return '';
-    const fullPath = path.join(this.projectBaseDir, relativePath);
+
+    // 1. Primary Direct Read (Relative to projectBaseDir)
+    let fullPath = path.join(this.projectBaseDir, relativePath);
     if (fs.existsSync(fullPath)) {
       return fs.readFileSync(fullPath, 'utf8');
     }
+
+    // 2. Absolute Path Rescue (Fallback if serialized path was absolute)
+    if (path.isAbsolute(relativePath) && fs.existsSync(relativePath)) {
+      return fs.readFileSync(relativePath, 'utf8');
+    }
+
+    // 3. Dynamic Rescue: Handle mismatched isProjectScoped isolation states
+    if (this.activeProjectName && this.activeProjectName !== 'default') {
+      const normRel = relativePath.replace(/[\\\/]/g, '/');
+      
+      // Case A: Base dir is isolated (ends with projectName), but path is NOT trimmed
+      // (e.g., projectBaseDir = ".../projects/foo", relativePath = "projects/foo/STAGE/...")
+      const prefix = `projects/${this.activeProjectName}/`;
+      if (this.isProjectScoped && normRel.startsWith(prefix)) {
+        const trimmedRel = normRel.substring(prefix.length);
+        const rescuePath = path.join(this.projectBaseDir, trimmedRel);
+        if (fs.existsSync(rescuePath)) {
+          return fs.readFileSync(rescuePath, 'utf8');
+        }
+      }
+
+      // Case B: Base dir is NOT isolated (vault root), but path is NOT scoped
+      // (e.g., projectBaseDir = ".../TheAndbData", relativePath = "STAGE/...")
+      if (!this.isProjectScoped && !normRel.startsWith('projects/')) {
+        const fixedRel = path.join('projects', this.activeProjectName, relativePath);
+        const rescuePath = path.join(this.projectBaseDir, fixedRel);
+        if (fs.existsSync(rescuePath)) {
+          return fs.readFileSync(rescuePath, 'utf8');
+        }
+      }
+    }
+
     return '';
   }
 
