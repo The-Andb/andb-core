@@ -29,6 +29,7 @@ export class SchemaOrchestrator {
         config: gitConfig,
         env,
         db: db || 'default',
+        typeFilter: type,
         message: null
       });
     }

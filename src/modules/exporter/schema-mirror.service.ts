@@ -12,10 +12,22 @@ export class SchemaMirrorService {
   /**
    * Mirrors the SQLite state to the filesystem in the specified base directory.
    */
-  async mirrorToFilesystem(envName: string, dbName: string, baseDir: string, databaseType: string = 'mysql') {
-    this.logger.info(`mirroring ${envName}/${dbName} [${databaseType}] to ${baseDir}`);
+  async mirrorToFilesystem(envName: string, dbName: string, baseDir: string, databaseType: string = 'mysql', typeFilter?: string) {
+    this.logger.info(`mirroring ${envName}/${dbName} [${databaseType}] to ${baseDir} (Filter: ${typeFilter || 'ALL'})`);
 
-    const types = ['TABLES', 'VIEWS', 'PROCEDURES', 'FUNCTIONS', 'TRIGGERS', 'EVENTS'];
+    const allTypes = ['TABLES', 'VIEWS', 'PROCEDURES', 'FUNCTIONS', 'TRIGGERS', 'EVENTS'];
+    
+    let types = allTypes;
+    if (typeFilter && typeFilter.toLowerCase() !== 'all') {
+      // Normalize name e.g. 'table' or 'tables' -> 'TABLES'
+      const normalized = typeFilter.toUpperCase().endsWith('S') 
+        ? typeFilter.toUpperCase() 
+        : `${typeFilter.toUpperCase()}S`;
+      
+      if (allTypes.includes(normalized)) {
+        types = [normalized];
+      }
+    }
 
     for (const type of types) {
       const objects = await this.storageService.getDDLObjects(envName, dbName, type, databaseType);

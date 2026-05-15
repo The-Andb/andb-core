@@ -110,7 +110,7 @@ export class GitOrchestrator {
   }
 
   private async _gitSyncInternal(payload: any) {
-    const { env, db, message, author } = payload;
+    const { env, db, message, author, typeFilter } = payload;
     const config = this.prepareConfig(payload);
 
     const gitService = await this.getGitService();
@@ -119,7 +119,7 @@ export class GitOrchestrator {
     const connection = this.configService?.getConnection(env);
     const dbType = connection?.type || 'mysql';
 
-    await this.mirrorService.mirrorToFilesystem(env, db, config.storagePath, dbType);
+    await this.mirrorService.mirrorToFilesystem(env, db, config.storagePath, dbType, typeFilter);
 
     const status = await gitService.getStatus();
     const hasChanges = status.modifiedFiles.length > 0 || status.untrackedFiles.length > 0;
