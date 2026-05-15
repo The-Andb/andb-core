@@ -440,6 +440,10 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
 
   // --- Exports ---
   async saveDdlExport(exportData: DdlExport): Promise<void> {
+    // Enforce lowercase data-hygiene inside the SQLite metadata record
+    if (exportData.export_type) exportData.export_type = exportData.export_type.toLowerCase();
+    if (exportData.database_type) exportData.database_type = exportData.database_type.toLowerCase();
+
     const extType = (exportData.export_type || 'unknown').toLowerCase();
     const dbType = (exportData.database_type || 'mysql').toLowerCase();
     const baseRelPath = `${exportData.environment}/${dbType}/${exportData.database_name}/${extType}/${exportData.export_name}.sql`;
@@ -458,14 +462,24 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
   }
 
   async getDdlExports(env: string, dbName: string, type?: string, limit?: number, databaseType?: string): Promise<DdlExport[]> {
-    const where: any = { environment: env, database_name: dbName };
-    if (type) where.export_type = type;
-    if (databaseType) where.database_type = databaseType;
+    const query = this.ds.getRepository(DdlExportEntity).createQueryBuilder('e');
     
-    const query = this.ds.getRepository(DdlExportEntity).createQueryBuilder('e')
-      .where(where)
-      .orderBy('e.exported_at', 'DESC');
-    if (limit) query.take(limit);
+    // Case-insensitive query matching to guarantee robust loads for legacy/restored database casing
+    query.where('LOWER(e.environment) = LOWER(:env)', { env })
+         .andWhere('LOWER(e.database_name) = LOWER(:dbName)', { dbName });
+         
+    if (type) {
+      query.andWhere('LOWER(e.export_type) = LOWER(:type)', { type });
+    }
+    if (databaseType) {
+      query.andWhere('LOWER(e.database_type) = LOWER(:databaseType)', { databaseType });
+    }
+    
+    query.orderBy('e.exported_at', 'DESC');
+    
+    if (limit) {
+      query.take(limit);
+    }
 
     const results = await query.getMany();
     // Re-hydrate ddl_content from file
@@ -479,13 +493,14 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
   }
 
   async deleteDdlExport(env: string, dbName: string, type: string, name: string, databaseType: string = 'mysql'): Promise<void> {
-    await this.ds.getRepository(DdlExportEntity).delete({
-      environment: env,
-      database_name: dbName,
-      export_type: type,
-      export_name: name,
-      database_type: databaseType
-    });
+    await this.ds.getRepository(DdlExportEntity).createQueryBuilder()
+      .delete()
+      .where('LOWER(environment) = LOWER(:env)', { env })
+      .andWhere('LOWER(database_name) = LOWER(:dbName)', { dbName })
+      .andWhere('LOWER(export_type) = LOWER(:type)', { type })
+      .andWhere('LOWER(export_name) = LOWER(:name)', { name })
+      .andWhere('LOWER(database_type) = LOWER(:databaseType)', { databaseType })
+      .execute();
   }
 
   // --- Snapshots ---

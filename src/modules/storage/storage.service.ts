@@ -151,10 +151,10 @@ export class StorageService {
   }
 
   async getDatabases(environment: string, databaseType?: string) {
-    let sql = 'SELECT DISTINCT database_name as name, database_type FROM ddl_exports WHERE environment = ?';
+    let sql = 'SELECT DISTINCT database_name as name, database_type FROM ddl_exports WHERE LOWER(environment) = LOWER(?)';
     const params = [environment];
     if (databaseType) {
-      sql += ' AND database_type = ?';
+      sql += ' AND LOWER(database_type) = LOWER(?)';
       params.push(databaseType);
     }
     sql += ' ORDER BY database_name ASC';
