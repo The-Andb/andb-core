@@ -9,6 +9,7 @@ export class ProjectEntity {
   @Column('text', { nullable: true }) description!: string;
   @Column('integer', { default: 0 }) is_favorite!: number;
   @Column('integer', { default: 0 }) order_index!: number;
+  @Column('text', { nullable: true }) project_base_dir!: string;
   
   @CreateDateColumn({ type: 'datetime' }) created_at!: Date;
   @UpdateDateColumn({ type: 'datetime' }) updated_at!: Date;

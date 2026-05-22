@@ -154,7 +154,7 @@ export class ComparatorService {
         // Check MODIFY
         if (srcCol && destCol && typeof srcCol !== 'string' && typeof destCol !== 'string') {
           // Semantic structural comparison
-          const properties = ['dataType', 'nullable', 'defaultValue', 'autoIncrement', 'unsigned', 'charset', 'collate'];
+          const properties = ['type', 'notNull', 'default', 'autoIncrement', 'unsigned', 'comment'];
           let hasChange = false;
 
           for (const prop of properties) {

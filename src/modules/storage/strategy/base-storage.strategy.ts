@@ -42,6 +42,37 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
+    // Pre-init legacy SQLite column healing (e.g. ddl_type -> export_type, ddl_name -> export_name)
+    try {
+      if (fs.existsSync(dbPath)) {
+        const BetterSqlite3 = require('better-sqlite3');
+        const Database = BetterSqlite3.default || BetterSqlite3;
+        const tempDb = new Database(dbPath);
+        
+        // 1. Check if ddl_exports exists and has legacy columns
+        const tables = tempDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ddl_exports'").all();
+        if (tables.length > 0) {
+          const columns = tempDb.prepare("PRAGMA table_info(ddl_exports)").all();
+          const hasDdlType = columns.some((col: any) => col.name === 'ddl_type');
+          const hasDdlName = columns.some((col: any) => col.name === 'ddl_name');
+          const hasExportType = columns.some((col: any) => col.name === 'export_type');
+          const hasExportName = columns.some((col: any) => col.name === 'export_name');
+
+          if (hasDdlType && !hasExportType) {
+            console.log('🔄 [Pre-Init Healing] Renaming legacy column ddl_type -> export_type in ddl_exports');
+            tempDb.prepare('ALTER TABLE ddl_exports RENAME COLUMN ddl_type TO export_type').run();
+          }
+          if (hasDdlName && !hasExportName) {
+            console.log('🔄 [Pre-Init Healing] Renaming legacy column ddl_name -> export_name in ddl_exports');
+            tempDb.prepare('ALTER TABLE ddl_exports RENAME COLUMN ddl_name TO export_name').run();
+          }
+        }
+        tempDb.close();
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [Pre-Init Healing] Legacy column check/rename skipped:', err.message);
+    }
+
     this.dataSource = new DataSource({
       type: 'better-sqlite3',
       database: dbPath,
@@ -306,45 +337,179 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
   }
 
   protected _readSqlFile(relativePath: string): string {
-    if (!relativePath) return '';
+    console.log(`[Andb-Core] [_readSqlFile] START - relativePath: "${relativePath}"`);
+    console.log(`[Andb-Core] [_readSqlFile] CONTEXT - projectBaseDir: "${this.projectBaseDir}", activeProjectName: "${this.activeProjectName}"`);
+
+    if (!relativePath) {
+      console.log(`[Andb-Core] [_readSqlFile] EMPTY PATH - returning empty string`);
+      return '';
+    }
 
     // 1. Primary Direct Read (Relative to projectBaseDir)
     let fullPath = path.join(this.projectBaseDir, relativePath);
+    console.log(`[Andb-Core] [_readSqlFile] Checking primary path: "${fullPath}"`);
     if (fs.existsSync(fullPath)) {
+      console.log(`[Andb-Core] [_readSqlFile] Primary path found! Reading content.`);
       return fs.readFileSync(fullPath, 'utf8');
     }
 
-    // 2. Absolute Path Rescue (Fallback if serialized path was absolute)
-    if (path.isAbsolute(relativePath) && fs.existsSync(relativePath)) {
-      return fs.readFileSync(relativePath, 'utf8');
-    }
-
-    // 3. Dynamic Rescue: Handle mismatched isProjectScoped isolation states
+    // 1.5. Project-scoped lookup: try projectBaseDir/projects/{projectName}/{relativePath}
+    // Handles the common case where file_path is stored relative to the project dir
+    // but projectBaseDir points to the root data directory.
     if (this.activeProjectName && this.activeProjectName !== 'default') {
-      const normRel = relativePath.replace(/[\\\/]/g, '/');
-      
-      // Case A: Base dir is isolated (ends with projectName), but path is NOT trimmed
-      // (e.g., projectBaseDir = ".../projects/foo", relativePath = "projects/foo/STAGE/...")
-      const prefix = `projects/${this.activeProjectName}/`;
-      if (this.isProjectScoped && normRel.startsWith(prefix)) {
-        const trimmedRel = normRel.substring(prefix.length);
-        const rescuePath = path.join(this.projectBaseDir, trimmedRel);
-        if (fs.existsSync(rescuePath)) {
-          return fs.readFileSync(rescuePath, 'utf8');
-        }
+      // Try the sanitized activeProjectName (already lowercased+slugified by setActiveProject)
+      const projectScopedPath = path.join(this.projectBaseDir, 'projects', this.activeProjectName, relativePath);
+      console.log(`[Andb-Core] [_readSqlFile] Checking project-scoped path: "${projectScopedPath}"`);
+      if (fs.existsSync(projectScopedPath)) {
+        console.log(`[Andb-Core] [_readSqlFile] Project-scoped path found! Reading content.`);
+        return fs.readFileSync(projectScopedPath, 'utf8');
       }
-
-      // Case B: Base dir is NOT isolated (vault root), but path is NOT scoped
-      // (e.g., projectBaseDir = ".../TheAndbData", relativePath = "STAGE/...")
-      if (!this.isProjectScoped && !normRel.startsWith('projects/')) {
-        const fixedRel = path.join('projects', this.activeProjectName, relativePath);
-        const rescuePath = path.join(this.projectBaseDir, fixedRel);
-        if (fs.existsSync(rescuePath)) {
-          return fs.readFileSync(rescuePath, 'utf8');
+      // Also try scanning all subdirs of projects/ and match by content-hash or name
+      // (handles display-name vs directory-name mismatch like "Flo AI" → "flo_ai")
+      const projectsRoot = path.join(this.projectBaseDir, 'projects');
+      console.log(`[Andb-Core] [_readSqlFile] Checking projectsRoot: "${projectsRoot}"`);
+      if (fs.existsSync(projectsRoot)) {
+        try {
+          const subdirs = fs.readdirSync(projectsRoot);
+          for (const subdir of subdirs) {
+            if (subdir === this.activeProjectName) continue; // already tried
+            const candidate = path.join(projectsRoot, subdir, relativePath);
+            console.log(`[Andb-Core] [_readSqlFile] Checking project subdir candidate: "${candidate}"`);
+            if (fs.existsSync(candidate)) {
+              console.log(`[Andb-Core] [_readSqlFile] Subdir candidate found! Reading content.`);
+              return fs.readFileSync(candidate, 'utf8');
+            }
+          }
+        } catch (e: any) {
+          console.log(`[Andb-Core] [_readSqlFile] Error listing projectsRoot: ${e.message}`);
         }
       }
     }
 
+    // 2. Absolute Path Rescue (Fallback if serialized path was absolute)
+    if (path.isAbsolute(relativePath)) {
+      console.log(`[Andb-Core] [_readSqlFile] Checking absolute path fallback: "${relativePath}"`);
+      if (fs.existsSync(relativePath)) {
+        console.log(`[Andb-Core] [_readSqlFile] Absolute path found! Reading content.`);
+        return fs.readFileSync(relativePath, 'utf8');
+      }
+    }
+
+    // 3. Normalized and Trimmed Self-Healing Path Resolution
+    const normRel = relativePath.replace(/[\\\/]/g, '/');
+    console.log(`[Andb-Core] [_readSqlFile] Normalized path: "${normRel}"`);
+
+    // Step A: Strip any potential active project prefix if it starts with projects/{activeProjectName}/
+    let tempPath = normRel;
+    if (this.activeProjectName && this.activeProjectName !== 'default') {
+      const prefix = `projects/${this.activeProjectName}/`;
+      if (tempPath.startsWith(prefix)) {
+        tempPath = tempPath.substring(prefix.length);
+        console.log(`[Andb-Core] [_readSqlFile] Stripped active project prefix. Remaining: "${tempPath}"`);
+      }
+    }
+    // Also strip generic projects/([^/]+)/ if activeProjectName is not matched but starts with projects/
+    if (tempPath.startsWith('projects/')) {
+      const matchProj = tempPath.match(/^projects\/([^\/]+)\/(.*)$/);
+      if (matchProj) {
+        tempPath = matchProj[2];
+        console.log(`[Andb-Core] [_readSqlFile] Stripped generic project prefix. Remaining: "${tempPath}"`);
+      }
+    }
+
+    // Step B: Match modern engine-isolated format or legacy format
+    // Modern: db/{env}/{engine}/{dbName}/{extType}/{fileName}
+    // Legacy: {env}/{dbName}/{extType}/{fileName}
+    let env = '';
+    let engine = '';
+    let dbName = '';
+    let extType = '';
+    let fileName = '';
+
+    const modernMatch = tempPath.match(/^db\/([^\/]+)\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.*\.sql)$/);
+    const legacyMatch = tempPath.match(/^([^\/]+)\/([^\/]+)\/([^\/]+)\/(.*\.sql)$/);
+
+    if (modernMatch) {
+      env = modernMatch[1];
+      engine = modernMatch[2];
+      dbName = modernMatch[3];
+      extType = modernMatch[4];
+      fileName = modernMatch[5];
+      console.log(`[Andb-Core] [_readSqlFile] Matched modern pattern. env="${env}", engine="${engine}", dbName="${dbName}", type="${extType}", file="${fileName}"`);
+    } else if (legacyMatch) {
+      env = legacyMatch[1];
+      dbName = legacyMatch[2];
+      extType = legacyMatch[3];
+      fileName = legacyMatch[4];
+      console.log(`[Andb-Core] [_readSqlFile] Matched legacy pattern. env="${env}", dbName="${dbName}", type="${extType}", file="${fileName}"`);
+    }
+
+    if (env && dbName && extType && fileName) {
+      // Step C: Generate a list of candidate relative paths relative to activeProject root or projectBaseDir
+      const candidates: string[] = [];
+      const engines = engine ? [engine, 'mysql', 'postgres', 'sqlite', 'oracle', 'mssql'] : ['mysql', 'postgres', 'sqlite', 'oracle', 'mssql'];
+
+      for (const eng of engines) {
+        // Modern scoped
+        candidates.push(`db/${env}/${eng}/${dbName}/${extType}/${fileName}`);
+        // Modern unscoped
+        if (this.activeProjectName && this.activeProjectName !== 'default') {
+          candidates.push(`projects/${this.activeProjectName}/db/${env}/${eng}/${dbName}/${extType}/${fileName}`);
+        }
+      }
+
+      // Legacy scoped
+      candidates.push(`${env}/${dbName}/${extType}/${fileName}`);
+      // Legacy unscoped
+      if (this.activeProjectName && this.activeProjectName !== 'default') {
+        candidates.push(`projects/${this.activeProjectName}/${env}/${dbName}/${extType}/${fileName}`);
+      }
+
+      // Step D: Try reading from candidates
+      for (const cand of candidates) {
+        const candPath = path.join(this.projectBaseDir, cand);
+        console.log(`[Andb-Core] [_readSqlFile] Checking self-healing candidate: "${candPath}"`);
+        if (fs.existsSync(candPath)) {
+          console.log(`[Andb-Core] [_readSqlFile] Candidate found! Reading: "${candPath}"`);
+          return fs.readFileSync(candPath, 'utf8');
+        }
+      }
+    }
+
+    // Step E: Broad fallbacks in case regex components missed
+    // Strip `db/` and `{engine}/` from any matched db/ path
+    const dbMatch = normRel.match(/^db\/([^\/]+)\/([^\/]+)\/(.*)$/);
+    if (dbMatch) {
+      const legacyRel = `${dbMatch[1]}/${dbMatch[3]}`;
+      const legacyPath = path.join(this.projectBaseDir, legacyRel);
+      console.log(`[Andb-Core] [_readSqlFile] Checking Step E dbMatch legacyPath: "${legacyPath}"`);
+      if (fs.existsSync(legacyPath)) {
+        console.log(`[Andb-Core] [_readSqlFile] Step E dbMatch legacyPath found!`);
+        return fs.readFileSync(legacyPath, 'utf8');
+      }
+      if (this.activeProjectName && this.activeProjectName !== 'default') {
+        const unscopedLegacyPath = path.join(this.projectBaseDir, 'projects', this.activeProjectName, legacyRel);
+        console.log(`[Andb-Core] [_readSqlFile] Checking Step E dbMatch unscopedLegacyPath: "${unscopedLegacyPath}"`);
+        if (fs.existsSync(unscopedLegacyPath)) {
+          console.log(`[Andb-Core] [_readSqlFile] Step E dbMatch unscopedLegacyPath found!`);
+          return fs.readFileSync(unscopedLegacyPath, 'utf8');
+        }
+      }
+    }
+
+    // Strip generic `projects/{name}/` from start if exists
+    const projMatch = normRel.match(/^projects\/[^\/]+\/(.*)$/);
+    if (projMatch) {
+      const strippedRel = projMatch[1];
+      const rescuePath = path.join(this.projectBaseDir, strippedRel);
+      console.log(`[Andb-Core] [_readSqlFile] Checking Step E projMatch rescuePath: "${rescuePath}"`);
+      if (fs.existsSync(rescuePath)) {
+        console.log(`[Andb-Core] [_readSqlFile] Step E projMatch rescuePath found!`);
+        return fs.readFileSync(rescuePath, 'utf8');
+      }
+    }
+
+    console.log(`[Andb-Core] [_readSqlFile] FAILED to load content for "${relativePath}" (No matching file found)`);
     return '';
   }
 
@@ -461,7 +626,7 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
     );
   }
 
-  async getDdlExports(env: string, dbName: string, type?: string, limit?: number, databaseType?: string): Promise<DdlExport[]> {
+  async getDdlExports(env: string, dbName: string, type?: string, limit?: number, databaseType?: string, exportName?: string): Promise<DdlExport[]> {
     const query = this.ds.getRepository(DdlExportEntity).createQueryBuilder('e');
     
     // Case-insensitive query matching to guarantee robust loads for legacy/restored database casing
@@ -474,6 +639,9 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
     if (databaseType) {
       query.andWhere('LOWER(e.database_type) = LOWER(:databaseType)', { databaseType });
     }
+    if (exportName) {
+      query.andWhere('LOWER(e.export_name) = LOWER(:exportName)', { exportName });
+    }
     
     query.orderBy('e.exported_at', 'DESC');
     
@@ -482,10 +650,10 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
     }
 
     const results = await query.getMany();
-    // Re-hydrate ddl_content from file
+    // Re-hydrate ddl_content from file — always include records, only overwrite content when found
     for (const r of results) {
       if ((r as any).file_path) {
-        let content = this._readSqlFile((r as any).file_path);
+        const content = this._readSqlFile((r as any).file_path);
         if (content) r.ddl_content = content;
       }
     }

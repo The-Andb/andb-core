@@ -71,6 +71,7 @@ CREATE TABLE projects (
   description TEXT,
   is_favorite INTEGER DEFAULT 0,
   order_index INTEGER DEFAULT 0,
+  project_base_dir TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

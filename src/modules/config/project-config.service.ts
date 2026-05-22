@@ -215,15 +215,48 @@ export class ProjectConfigService {
     return this.getProjects().find((p: any) => p.id === this.activeProjectId) || null;
   }
 
-  async reload() {
+  async reload(newProjectId?: string) {
     try {
       const projects = await this.storageService.getProjects();
       this.config.projects = projects;
       this.logger.info(`ProjectConfigService reloaded. Found ${projects.length} projects.`);
       
-      // Update active project if it was lost or not set
-      if (!this.activeProjectId && projects.length > 0) {
-        this.activeProjectId = projects[0].id;
+      const targetProjectId = newProjectId || this.activeProjectId || (projects.length > 0 ? projects[0].id : null);
+      if (targetProjectId) {
+        this.activeProjectId = targetProjectId;
+        
+        // Load environments for target project
+        const envs = await this.storageService.getProjectEnvironments(targetProjectId);
+        const settings = await this.storageService.getProjectSettings(targetProjectId);
+
+        this.config.environments = {};
+        for (const env of envs) {
+          this.config.environments[env.env_name] = {
+             id: env.id,
+             type: env.source_type,
+             path: env.path,
+             host: env.host,
+             port: env.port,
+             user: env.username,
+             password: '', 
+             database: env.database_name,
+             ssh: env.use_ssh_tunnel ? {
+               host: env.ssh_host,
+               port: env.ssh_port,
+               username: env.ssh_username,
+               privateKey: env.ssh_key_path
+             } : undefined,
+             ssl: env.use_ssl === 1,
+             readonly: env.is_read_only === 1
+          };
+        }
+
+        if (settings && settings['domain_normalization_pattern']) {
+           this.config.domainNormalization = {
+              pattern: settings['domain_normalization_pattern'],
+              replacement: settings['domain_normalization_replacement'] || ''
+           };
+        }
       }
     } catch (e: any) {
       this.logger.error(`Failed to reload ProjectConfigService: ${e.message}`);

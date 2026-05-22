@@ -235,4 +235,25 @@ describe('ParserService', () => {
       expect(service.normalize(input)).toBe(input);
     });
   });
+
+  describe('parseTableDetailed', () => {
+    it('should parse double scale/precision and generated columns correctly', () => {
+      const ddl = `CREATE TABLE \`conference_meeting\` (
+  \`meeting_start\` DOUBLE(13,3) DEFAULT NULL,
+  \`meeting_duration\` INT GENERATED ALWAYS AS (IF((\`meeting_end\` IS NOT NULL), 1, 0)) VIRTUAL
+)`;
+      const result = service.parseTableDetailed(ddl, 'mysql');
+      expect(result).not.toBeNull();
+      
+      const startCol = result!.columns.find(c => c.name === 'meeting_start');
+      expect(startCol).toBeDefined();
+      expect(startCol!.definition).toContain('DOUBLE(13,3)');
+
+      const durationCol = result!.columns.find(c => c.name === 'meeting_duration');
+      expect(durationCol).toBeDefined();
+      expect(durationCol!.definition).toContain('GENERATED ALWAYS AS');
+      expect(durationCol!.definition).toContain('IF((`meeting_end` IS NOT NULL), 1, 0)');
+      expect(durationCol!.definition).toContain('VIRTUAL');
+    });
+  });
 });

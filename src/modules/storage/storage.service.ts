@@ -117,9 +117,8 @@ export class StorageService {
   }
 
   async getDDL(environment: string, database: string, type: string, name: string, databaseType: string = 'mysql') {
-    const rows = await this.ensureStrategy().getDdlExports(environment, database, type, 1, databaseType);
-    const row = rows.find(r => r.export_name === name);
-    return row ? row.ddl_content : null;
+    const rows = await this.ensureStrategy().getDdlExports(environment, database, type, 1, databaseType, name);
+    return rows[0] ? rows[0].ddl_content : null;
   }
   async getDDLObjects(environment: string, database: string, type: string, databaseType: string = 'mysql') {
     const rows = await this.ensureStrategy().getDdlExports(environment, database, type, undefined, databaseType);

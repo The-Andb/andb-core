@@ -11,7 +11,7 @@ describe('ComparatorService', () => {
     saveComparison: jest.fn().mockResolvedValue(true),
   };
   const mockConfigService = {
-    getDomainNormalization: jest.fn().mockReturnValue({ pattern: /(?!)/, replacement: '' }),
+    getDomainNormalization: jest.fn().mockReturnValue([{ pattern: /(?!)/, replacement: '' }]),
   };
 
   beforeEach(() => {

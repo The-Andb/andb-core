@@ -44,7 +44,7 @@ export interface ICoreStorageStrategy {
 
   // --- Exports ---
   saveDdlExport(exportData: DdlExport): Promise<void>;
-  getDdlExports(env: string, dbName: string, type?: string, limit?: number, databaseType?: string): Promise<DdlExport[]>;
+  getDdlExports(env: string, dbName: string, type?: string, limit?: number, databaseType?: string, exportName?: string): Promise<DdlExport[]>;
   deleteDdlExport(env: string, dbName: string, type: string, name: string): Promise<void>;
 
   // --- Snapshots ---

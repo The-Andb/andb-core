@@ -15,6 +15,7 @@ export * from './common/interfaces/connection.interface';
 export * from './common/interfaces/driver.interface';
 export * from './common/interfaces/schema.interface';
 export * from './common/interfaces/result.interface';
+export * from './common/interfaces/prompt.interface';
 
 // Services
 export * from './modules/storage/storage.service';

@@ -59,7 +59,7 @@ export class SemanticMapper {
       return !!val1 === !!val2;
     }
 
-    if (prop === 'defaultValue') {
+    if (prop === 'default' || prop === 'defaultValue') {
       if (!val1 && !val2) return true;
       if (!val1 || !val2) return false;
       const v1 = String(val1).replace(/::[a-z ]+$/i, '').replace(/^'|'$/g, '');

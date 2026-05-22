@@ -31,6 +31,7 @@ import { OrchestrationService } from './modules/orchestration/orchestration.serv
 import { featureConfig } from './modules/config/feature.config';
 import { DependencySearchService } from './modules/search/dependency-search.service';
 import { VaultMigrationService } from './modules/storage/migration/vault-migration.service';
+import { VaultIndexerService } from './modules/storage/migration/vault-indexer.service';
 import { AIService } from './modules/orchestration/ai.service';
 import { AIOrchestrator } from './modules/orchestration/ai-orchestrator.service';
 import { KnowledgeService } from './modules/knowledge/knowledge.service';
@@ -185,10 +186,13 @@ export class Container {
     // Rehydrate synchronous accessors for CLI configurations
     await this.config.init(this.storage);
 
-    // Relocate legacy vault data to engine-isolated folders
+    // Relocate legacy vault data to engine-isolated folders & reconstruct mapping cache
     if (projectBaseDir) {
       const vaultMigration = new VaultMigrationService(this.config, projectBaseDir);
       await vaultMigration.migrate();
+
+      const vaultIndexer = new VaultIndexerService(this.storage, projectBaseDir);
+      await vaultIndexer.index();
     }
   }
 

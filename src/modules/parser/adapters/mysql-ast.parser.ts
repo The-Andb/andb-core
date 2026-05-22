@@ -75,19 +75,50 @@ export class MysqlAstParser implements ISqlAstParser {
           const defVal = this.extractDefaultValue(def.default_val);
           
           let definition = `${dataType}`;
-          if (def.definition.length) definition += `(${def.definition.length})`;
-          if (isNotNull) definition += ' NOT NULL';
-          if (defVal !== null) definition += ` DEFAULT ${defVal}`;
-          if (def.auto_increment) definition += ' AUTO_INCREMENT';
+          if (def.definition.length != null) {
+             definition += `(${def.definition.length}`;
+             if (def.definition.scale != null) {
+                definition += `,${def.definition.scale}`;
+             }
+             definition += `)`;
+          }
+
+          if (Array.isArray(def.definition.suffix) && def.definition.suffix.length > 0) {
+             definition += ' ' + def.definition.suffix.join(' ');
+          }
+
+          if (def.generated) {
+             const genType = (def.generated.value || 'GENERATED ALWAYS AS').toUpperCase();
+             const exprSql = this.parser.exprToSQL(def.generated.expr, { database: 'MySQL' });
+             const storage = (def.generated.storage_type || '').toUpperCase();
+             definition += ` ${genType} (${exprSql})`;
+             if (storage) {
+                definition += ` ${storage}`;
+             }
+          } else {
+             if (isNotNull) definition += ' NOT NULL';
+             if (defVal !== null) definition += ` DEFAULT ${defVal}`;
+             if (def.auto_increment) definition += ' AUTO_INCREMENT';
+          }
+
+          const comment = this.extractCommentValue(def.comment);
+          if (comment) {
+             definition += ` COMMENT '${comment.replace(/'/g, "''")}'`;
+          }
+
+          const isUnsigned = Array.isArray(def.definition.suffix) && 
+                             def.definition.suffix.some((s: any) => String(s).toUpperCase() === 'UNSIGNED');
 
           columns.push({
             name: colName,
             dataType: dataType,
             length: def.definition.length,
+            scale: def.definition.scale,
             nullable: !isNotNull,
             defaultValue: defVal,
-            comment: this.extractCommentValue(def.comment),
+            comment: comment,
             autoIncrement: !!def.auto_increment,
+            unsigned: isUnsigned,
             rawDefinition: definition,
             definition: definition
           } as any);
