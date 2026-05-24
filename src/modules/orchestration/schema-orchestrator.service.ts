@@ -202,7 +202,7 @@ export class SchemaOrchestrator {
     // Support single item direct mode from options
     if (!Array.isArray(itemsToProcess) || itemsToProcess.length === 0) {
       if (payload.type && payload.name && payload.name !== 'batch') {
-          itemsToProcess = [{ type: payload.type, name: payload.name, status: 'UPDATED' }];
+          itemsToProcess = [{ type: payload.type, name: payload.name, status: payload.status || 'UPDATED' }];
       } else {
           this.logger.info('No objects to migrate.');
           return { success: true, successful: [], failed: [], dryRun, safetyLevel: 'safe', totalStatements: 0 };
