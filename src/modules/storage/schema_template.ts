@@ -42,6 +42,7 @@ CREATE TABLE migration_history (
   target_objects TEXT,
   status TEXT NOT NULL,
   error_message TEXT,
+  file_path TEXT,
   executed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   executed_by TEXT
 );

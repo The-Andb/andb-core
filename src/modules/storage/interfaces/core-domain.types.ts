@@ -94,6 +94,7 @@ export interface MigrationHistory {
   target_objects: string; // JSON
   status: string; // 'PENDING' | 'SUCCESS' | 'FAILED'
   error_message?: string;
+  file_path?: string;
   executed_at?: Date;
   executed_by?: string;
 }

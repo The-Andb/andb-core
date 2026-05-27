@@ -9,6 +9,7 @@ export class MigrationHistoryEntity {
   @Column('text') target_objects!: string;
   @Column('text') status!: string;
   @Column('text', { nullable: true }) error_message!: string;
+  @Column('text', { nullable: true }) file_path?: string;
   @CreateDateColumn({ type: 'datetime' }) executed_at!: Date;
   @Column('text', { nullable: true }) executed_by!: string;
 }

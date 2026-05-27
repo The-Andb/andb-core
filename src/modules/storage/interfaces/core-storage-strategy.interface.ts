@@ -59,7 +59,7 @@ export interface ICoreStorageStrategy {
 
   // --- Migration History ---
   saveMigrationHistory(history: MigrationHistory): Promise<number>; // Returns newly inserted ID
-  updateMigrationStatus(id: number, status: string, error?: string): Promise<void>;
+  updateMigrationStatus(id: number, status: string, error?: string, filePath?: string): Promise<void>;
   getMigrationHistory(limit?: number): Promise<MigrationHistory[]>;
 
   // --- Utility / Raw ---

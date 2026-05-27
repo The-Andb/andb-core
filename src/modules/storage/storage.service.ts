@@ -248,8 +248,8 @@ export class StorageService {
     });
   }
 
-  async updateMigrationStatus(id: number, status: string, error?: string) {
-    return this.ensureStrategy().updateMigrationStatus(id, status, error);
+  async updateMigrationStatus(id: number, status: string, error?: string, filePath?: string) {
+    return this.ensureStrategy().updateMigrationStatus(id, status, error, filePath);
   }
 
   async getMigrationHistory(limit: number = 100) {

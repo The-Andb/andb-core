@@ -281,6 +281,14 @@ export class SchemaOrchestrator {
     const autoBackup = this.configService.getAutoBackup();
     const dbName = destConn.config.database || 'default';
 
+    const historyId = await this.storageService.addMigrationHistory(
+      destEnv,
+      dbName,
+      'SYNC',
+      objects.map(o => ({ type: o.type, name: o.name, status: o.status }))
+    );
+
+    const executedSqlBlocks: string[] = [];
     const destDriver = await this.driverFactory.create(destConn.type, destConn.config);
 
     try {
@@ -310,7 +318,31 @@ export class SchemaOrchestrator {
 
         try {
           for (const statement of statements) {
-            if (statement) await destDriver.query(statement);
+            if (statement) {
+              const execTime = new Date().toLocaleString();
+              try {
+                await destDriver.query(statement);
+                executedSqlBlocks.push(
+                  `-- ==================================================\n` +
+                  `-- Executed at: ${execTime}\n` +
+                  `-- Object: ${obj.name} (${obj.type})\n` +
+                  `-- Status: SUCCESS\n` +
+                  `-- ==================================================\n` +
+                  `${statement.trim()}${statement.trim().endsWith(';') ? '' : ';'}`
+                );
+              } catch (err: any) {
+                executedSqlBlocks.push(
+                  `-- ==================================================\n` +
+                  `-- Executed at: ${execTime}\n` +
+                  `-- Object: ${obj.name} (${obj.type})\n` +
+                  `-- Status: FAILED\n` +
+                  `-- Error: ${err.message}\n` +
+                  `-- ==================================================\n` +
+                  `/* FAILED COMMAND:\n${statement.trim()}\n*/`
+                );
+                throw err;
+              }
+            }
           }
           successful.push(obj);
 
@@ -348,6 +380,27 @@ export class SchemaOrchestrator {
       }
 
       await destDriver.query(this.migrator.enableForeignKeyChecks());
+
+      // Write executed SQL trace history file to the vault
+      let relPath: string | undefined = undefined;
+      if (executedSqlBlocks.length > 0 && historyId) {
+        const dbType = (destConn.type || 'mysql').toLowerCase();
+        const baseRelPath = `db/${destEnv}/${dbType}/${dbName}/.history/migration_${historyId}.sql`;
+        relPath = this.storageService.strategy?._getScopedPath(baseRelPath) || baseRelPath;
+        const fullContent = executedSqlBlocks.join('\n\n');
+        try {
+          this.storageService.strategy?._writeSqlFile(relPath, fullContent);
+        } catch (writeErr: any) {
+          this.logger.error(`Failed to write migration history file: ${writeErr.message}`);
+        }
+      }
+
+      // Update SQLite history record status and path
+      if (historyId) {
+        const finalStatus = failed.length > 0 ? 'FAILED' : 'SUCCESS';
+        const errorMsg = failed.length > 0 ? failed.map(f => `${f.name}: ${f.error}`).join('; ') : undefined;
+        await this.storageService.updateMigrationStatus(historyId, finalStatus, errorMsg, relPath);
+      }
 
       // Git Sync
       if (gitConfig?.autoCommit) {

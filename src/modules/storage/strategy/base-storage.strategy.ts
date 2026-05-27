@@ -850,8 +850,8 @@ export abstract class BaseStorageStrategy implements ICoreStorageStrategy {
     return result.id || 0;
   }
 
-  async updateMigrationStatus(id: number, status: string, error?: string): Promise<void> {
-    await this.ds.getRepository(MigrationHistoryEntity).update(id, { status, error_message: error });
+  async updateMigrationStatus(id: number, status: string, error?: string, filePath?: string): Promise<void> {
+    await this.ds.getRepository(MigrationHistoryEntity).update(id, { status, error_message: error, file_path: filePath });
   }
 
   async getMigrationHistory(limit: number = 100): Promise<MigrationHistory[]> {
