@@ -136,22 +136,16 @@ export class MysqlIntrospectionService implements IIntrospectionService {
           return aName.localeCompare(bName);
         });
 
-        // Find the index of the first line that starts with ')' or 'CONSTRAINT' searching from the end of standardLines
-        let insertAt = standardLines.length - 1;
-        for (let i = standardLines.length - 1; i >= 0; i--) {
+        // Find the index of the closing parenthesis ')' of the table definition
+        let insertAt = -1;
+        for (let i = 0; i < standardLines.length; i++) {
           if (standardLines[i].trim().startsWith(')')) {
             insertAt = i;
-          } else if (standardLines[i].trim().startsWith('CONSTRAINT')) {
-            insertAt = i;
-          } else if (standardLines[i].trim().startsWith('PRIMARY KEY')) {
-            // Usually PK is before other keys, so we insert after
-            insertAt = i + 1;
-            break;
-          } else if (standardLines[i].trim() !== ')' && !standardLines[i].trim().startsWith('CONSTRAINT')) {
-            // Found a column definition, break
-            insertAt = i + 1;
             break;
           }
+        }
+        if (insertAt === -1) {
+          insertAt = standardLines.length - 1;
         }
 
         // Ensure trailing comma logic is sound. We will apply commas to all lines before the last line inside the definition.
