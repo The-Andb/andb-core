@@ -83,6 +83,50 @@ export class ComparatorService {
       operations.push({ ...op, tableName });
     });
 
+    // 4. Compare Table-level Options
+    const srcOpts = srcTable.options || {};
+    const destOpts = destTable.options || {};
+    const optionKeys = ['engine', 'charset', 'collation', 'comment'];
+    optionKeys.forEach((key) => {
+      if (SemanticMapper.shouldIgnoreProperty(key, srcDialect, destDialect)) return;
+      const srcVal = srcOpts[key];
+      const destVal = destOpts[key];
+      
+      let isChanged = false;
+      if (key === 'comment') {
+        const norm = (v: any) => String(v || '').trim().replace(/^['"`]|['"`]$/g, '');
+        isChanged = norm(srcVal) !== norm(destVal);
+      } else {
+        isChanged = String(srcVal || '').toUpperCase().trim() !== String(destVal || '').toUpperCase().trim();
+      }
+
+      if (isChanged && srcVal !== undefined && srcVal !== null && srcVal !== '') {
+        operations.push({
+          type: 'MODIFY',
+          target: 'OPTION',
+          name: key,
+          tableName,
+          definition: String(srcVal),
+        });
+      }
+    });
+
+    // 5. Compare Partitioning
+    const srcPartitions = srcTable.partitions;
+    const destPartitions = destTable.partitions;
+    if (srcPartitions || destPartitions) {
+      const normPart = (v: any) => String(v || '').replace(/\s+/g, ' ').toUpperCase().trim();
+      if (normPart(srcPartitions) !== normPart(destPartitions)) {
+        operations.push({
+          type: 'MODIFY',
+          target: 'OPTION',
+          name: 'partitions',
+          tableName,
+          definition: srcPartitions || '',
+        });
+      }
+    }
+
     return {
       tableName,
       operations,
@@ -147,14 +191,24 @@ export class ComparatorService {
       if (!destCol) {
         // ADD
         const colDef = typeof srcCol === 'string' ? srcCol : (srcCol.rawDefinition || srcCol.definition);
-        const position = (destDialect === 'mysql' && prevExistingColumnName) ? `AFTER \`${prevExistingColumnName}\`` : '';
+        let position = '';
+        if (destDialect === 'mysql') {
+          if (prevExistingColumnName) {
+            position = `AFTER \`${prevExistingColumnName}\``;
+          } else {
+            const destColumnNames = Array.isArray(destColumns) ? destColumns.map((c: any) => c.name) : Object.keys(destColumns || {});
+            if (destColumnNames.length > 0) {
+              position = 'FIRST';
+            }
+          }
+        }
         const def = `${colDef} ${position}`.trim();
         alterColumns.push({ type: 'ADD', name: columnName, def: def });
       } else {
         // Check MODIFY
         if (srcCol && destCol && typeof srcCol !== 'string' && typeof destCol !== 'string') {
           // Semantic structural comparison
-          const properties = ['type', 'notNull', 'default', 'autoIncrement', 'unsigned', 'comment'];
+          const properties = ['type', 'notNull', 'default', 'autoIncrement', 'unsigned', 'collate', 'comment'];
           let hasChange = false;
 
           for (const prop of properties) {
@@ -165,8 +219,35 @@ export class ComparatorService {
             }
           }
 
+          // Check for position shift in MySQL
+          let positionChanged = false;
+          let positionDef = '';
+          if (destDialect === 'mysql') {
+            const destColumnNames = Array.isArray(destColumns) ? destColumns.map((c: any) => c.name) : Object.keys(destColumns || {});
+            const commonSrcNames = srcColumnNames.filter((name: string) => destColumnNames.includes(name));
+            const commonDestNames = destColumnNames.filter((name: string) => srcColumnNames.includes(name));
+
+            const srcIdx = commonSrcNames.indexOf(columnName);
+            const destIdx = commonDestNames.indexOf(columnName);
+
+            const srcPrev = srcIdx > 0 ? commonSrcNames[srcIdx - 1] : null;
+            const destPrev = destIdx > 0 ? commonDestNames[destIdx - 1] : null;
+
+            if (srcPrev !== destPrev) {
+              positionChanged = true;
+              if (srcPrev === null) {
+                positionDef = 'FIRST';
+              } else {
+                positionDef = `AFTER \`${srcPrev}\``;
+              }
+            }
+          }
+
           if (hasChange) {
-            const def = srcCol.rawDefinition || srcCol.definition;
+            let def = srcCol.rawDefinition || srcCol.definition;
+            if (positionChanged && !def.toUpperCase().includes('FIRST') && !def.toUpperCase().includes('AFTER')) {
+              def = `${def} ${positionDef}`.trim();
+            }
             alterColumns.push({ type: 'MODIFY', name: columnName, def });
           }
         } else {
@@ -180,7 +261,9 @@ export class ComparatorService {
           }
         }
       }
-      prevExistingColumnName = columnName;
+      if (destCol) {
+        prevExistingColumnName = columnName;
+      }
     }
 
     // Check for DROP
@@ -284,6 +367,22 @@ export class ComparatorService {
   /**
    * Compare generic DDL objects (Views, Procedures, Functions, Events)
    */
+  /**
+   * Strip SQL comments (line comments and block comments) from DDL
+   * for a consistent comparison baseline across all normalization passes.
+   */
+  private _stripSqlComments(ddl: string): string {
+    if (!ddl) return '';
+    // Remove block comments first (/* ... */)
+    let result = ddl.replace(/\/\*[\s\S]*?\*\//g, '');
+    // Remove line comments (-- to end of line)
+    result = result.replace(/--[^\r\n]*/gm, '');
+    return result;
+  }
+
+  /**
+   * Compare generic DDL objects (Views, Procedures, Functions, Events)
+   */
   compareGenericDDL(
     type: 'VIEW' | 'PROCEDURE' | 'FUNCTION' | 'EVENT',
     name: string,
@@ -300,11 +399,11 @@ export class ComparatorService {
       return { type, name, operation: 'DROP' };
     }
 
-    const normSrc = this.parser.normalize(this._unescapeHtml(srcDDL), { ignoreDefiner: true, ignoreWhitespace: true }).toLowerCase();
-    const normDest = this.parser.normalize(this._unescapeHtml(destDDL), {
-      ignoreDefiner: true,
-      ignoreWhitespace: true,
-    }).toLowerCase();
+    const cleanSrc = this._applyNormalization(this._unescapeHtml(srcDDL));
+    const cleanDest = this._applyNormalization(this._unescapeHtml(destDDL));
+
+    const normSrc = this.parser.normalizeRoutineDDL(cleanSrc);
+    const normDest = this.parser.normalizeRoutineDDL(cleanDest);
 
     if (normSrc !== normDest) {
       return { type, name, operation: 'REPLACE', definition: srcDDL };
@@ -330,13 +429,16 @@ export class ComparatorService {
       return this.compareGenericDDL('TRIGGER' as any, name, srcDDL, destDDL);
     }
 
+    const cleanSrc = this._applyNormalization(this._unescapeHtml(srcDDL));
+    const cleanDest = this._applyNormalization(this._unescapeHtml(destDDL));
+
     // Specialized compare logic from Legacy
     const hasChanges =
       srcTrigger.timing !== destTrigger.timing ||
       srcTrigger.event !== destTrigger.event ||
       srcTrigger.tableName !== destTrigger.tableName ||
-      this.parser.normalize(srcDDL, { ignoreDefiner: true, ignoreWhitespace: true }) !==
-      this.parser.normalize(destDDL, { ignoreDefiner: true, ignoreWhitespace: true });
+      this.parser.normalizeRoutineDDL(cleanSrc) !==
+      this.parser.normalizeRoutineDDL(cleanDest);
 
     if (hasChanges) {
       return { type: 'TRIGGER', name, operation: 'REPLACE', definition: srcDDL };
@@ -565,13 +667,23 @@ export class ComparatorService {
       } else if (!srcDDL && destDDL) {
         // DEPRECATED — missing in source
         status = 'missing_in_source';
-        if (singularType !== 'TABLE') {
-          alterStatements = [`DROP ${singularType} IF EXISTS \`${name}\`;`];
-        }
+        alterStatements = [`DROP ${singularType} IF EXISTS \`${name}\`;`];
         diffSummary = `[DEPRECATED] ${singularType} ${name}`;
       } else {
         // BOTH EXIST — check for real changes
-        const hasChange = this._hasRealChange(srcDDL, destDDL, storageType);
+        const srcObj = srcObjects.find(o => o.name === name);
+        const destObj = destObjects.find(o => o.name === name);
+        let metaChanged = false;
+        if (srcObj && destObj) {
+          if (srcObj.schema_charset !== destObj.schema_charset ||
+              srcObj.schema_collation !== destObj.schema_collation ||
+              srcObj.ddl_charset !== destObj.ddl_charset ||
+              srcObj.ddl_collation !== destObj.ddl_collation) {
+            metaChanged = true;
+          }
+        }
+
+        const hasChange = metaChanged || this._hasRealChange(srcDDL, destDDL, storageType);
 
         if (hasChange) {
           status = 'different';
@@ -581,6 +693,9 @@ export class ComparatorService {
             const colCount = tableDiff.operations.filter(op => op.target === 'COLUMN').length;
             const idxCount = tableDiff.operations.filter(op => op.target === 'INDEX').length;
             diffSummary = `[UPDATED] ${name}: col=${colCount}, idx=${idxCount}`;
+            if (metaChanged && alterStatements.length === 0) {
+              diffSummary = `[UPDATED] ${name} (metadata changed)`;
+            }
           } else {
             const objDiff = (storageType === 'TRIGGERS')
               ? this.compareTriggers(name, srcDDL, destDDL)
@@ -590,7 +705,14 @@ export class ComparatorService {
               alterStatements = this.migrator.generateObjectSQL(objDiff);
               diffSummary = `[UPDATED] ${name}`;
             } else {
-              status = 'equal';
+              // _hasRealChange() said content differs but compareGenericDDL found no
+              // structural diff after strict normalization. This can happen when the
+              // DEFINER or whitespace alone differs, OR when normalization strategies
+              // disagree. Trust _hasRealChange as a fallback: mark as different so
+              // the user can inspect the raw DDL side-by-side and decide.
+              status = 'different';
+              alterStatements = [srcDDL]; // Full REPLACE as fallback
+              diffSummary = `[UPDATED] ${name} (content differs)`;
             }
           }
         } else {
@@ -861,37 +983,44 @@ export class ComparatorService {
    * Filter false-positive changes (Legacy parity)
    */
   private _hasRealChange(src: string, dest: string, type: string): boolean {
-    // Standardize: Remove HTML entities, normalize SQL, remove comments, apply normalization, remove backticks, and lowercase
-    const cleanFn = (text: string) => {
-      let cleaned = this._unescapeHtml(text);
-      cleaned = this.parser.normalize(cleaned, { ignoreDefiner: true, ignoreWhitespace: true });
-      // Aggressive comment removal for environmental parity
-      cleaned = cleaned.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-      cleaned = this._applyNormalization(cleaned);
-      // Remove CHARACTER SET and COLLATE to avoid environmental noise
-      cleaned = cleaned.replace(/CHARACTER SET [a-zA-Z0-9_]+/gi, '').replace(/COLLATE [a-zA-Z0-9_]+/gi, '');
-      return cleaned.replace(/[`'"]/g, '').replace(/\s+/g, '').toLowerCase();
-    };
-
-    const ns = cleanFn(src);
-    const nd = cleanFn(dest);
-
-    if (ns === nd) return false;
-
-    // DEBUG: Write mismatch to file to see what remains
-    try {
-      const fs = require('fs');
-      const logContent = `--- SRC CLEANED ---\n${ns}\n--- DEST CLEANED ---\n${nd}\n------------------\n`;
-      fs.appendFileSync('/Volumes/FlexibleWorkplace/The-Andb/mismatch.txt', logContent);
-    } catch(e) {}
-
-    // For tables, we can do a deeper check via compareTables if needed
     if (type === 'TABLES' || type === 'TABLE') {
+      const cleanFn = (text: string) => {
+        let cleaned = this._unescapeHtml(text);
+        cleaned = this.parser.normalize(cleaned, { ignoreDefiner: true, ignoreWhitespace: true });
+        // Aggressive comment removal for environmental parity
+        cleaned = cleaned.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        cleaned = this._applyNormalization(cleaned);
+        // Remove CHARACTER SET and COLLATE to avoid environmental noise
+        cleaned = cleaned.replace(/CHARACTER SET [a-zA-Z0-9_]+/gi, '').replace(/COLLATE [a-zA-Z0-9_]+/gi, '');
+        return cleaned.replace(/[`'"]/g, '').replace(/\s+/g, '').toLowerCase();
+      };
+
+      const ns = cleanFn(src);
+      const nd = cleanFn(dest);
+
+      if (ns === nd) return false;
+
+      // DEBUG: Write mismatch to file to see what remains
+      try {
+        const fs = require('fs');
+        const logContent = `--- SRC CLEANED ---\n${ns}\n--- DEST CLEANED ---\n${nd}\n------------------\n`;
+        fs.appendFileSync('/Volumes/FlexibleWorkplace/The-Andb/mismatch.txt', logContent);
+      } catch(e) {}
+
       const diff = this.compareTables(src, dest);
       return diff.hasChanges;
     }
 
-    return true;
+    const cleanRoutine = (text: string) => {
+      let cleaned = this._unescapeHtml(text);
+      cleaned = this._applyNormalization(cleaned);
+      return this.parser.normalizeRoutineDDL(cleaned);
+    };
+
+    const ns = cleanRoutine(src);
+    const nd = cleanRoutine(dest);
+
+    return ns !== nd;
   }
 
   /**

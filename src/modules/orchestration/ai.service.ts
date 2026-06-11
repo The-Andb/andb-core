@@ -63,7 +63,7 @@ export class AIService {
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
-        this.availableModels = data.models?.map((m: any) => m.name.replace('models/', '')) || [];
+        this.availableModels = (data as any).models?.map((m: any) => m.name.replace('models/', '')) || [];
       }
     } catch (e: any) {
       this.logger.error(`❌ Discovery error: ${e.message}`);
@@ -206,7 +206,7 @@ export class AIService {
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || 'No response from OpenAI';
+    return (data as any).choices?.[0]?.message?.content || 'No response from OpenAI';
   }
 
   private async askAnthropic(question: string, context?: any, systemInstruction?: string): Promise<string> {
@@ -267,7 +267,7 @@ export class AIService {
     }
 
     const data = await response.json();
-    return data.content?.[0]?.text || 'No response from Anthropic';
+    return (data as any).content?.[0]?.text || 'No response from Anthropic';
   }
 
   private async askVertexAI(question: string, context?: any, systemInstruction?: string): Promise<string> {
@@ -323,7 +323,7 @@ export class AIService {
     }
 
     const data = await response.json();
-    const candidate = data.candidates?.[0];
+    const candidate = (data as any).candidates?.[0];
     const message = candidate?.content;
     return message?.parts?.map((p: any) => p.text).join('') || 'No response from Vertex AI';
   }
@@ -346,7 +346,7 @@ export class AIService {
       }
 
       const data = await this.callGeminiApi(model, payload);
-      const candidate = data.candidates?.[0];
+      const candidate = (data as any).candidates?.[0];
       const message = candidate?.content;
       
       messages.push(message);

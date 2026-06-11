@@ -59,6 +59,11 @@ export interface DdlExport {
   ddl_content: string;
   database_type?: string;
   exported_at?: Date;
+  definer?: string;
+  schema_charset?: string;
+  schema_collation?: string;
+  ddl_charset?: string;
+  ddl_collation?: string;
 }
 
 export interface DdlSnapshot {

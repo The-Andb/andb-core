@@ -28,11 +28,15 @@ export class SecretPromptProvider implements IPromptProvider {
       const secretsPkgPath = path.dirname(require.resolve('@the-andb/secrets/package.json'));
       this.secretsPath = secretsPkgPath;
       this.isPackageSource = true;
-      this.logger.info(`📦 Using internal secrets from package: ${this.secretsPath}`);
+      if (typeof this.logger.debug === 'function') {
+        this.logger.debug(`📦 Using internal secrets from package: ${this.secretsPath}`);
+      }
     } catch (e) {
       // Priority 3: Fallback to local cwd/secrets
       this.secretsPath = path.join(process.cwd(), 'secrets');
-      this.logger.warn(`⚠️ @the-andb/secrets package not found. Using fallback: ${this.secretsPath}`);
+      if (typeof this.logger.debug === 'function') {
+        this.logger.debug(`⚠️ @the-andb/secrets package not found. Using fallback: ${this.secretsPath}`);
+      }
     }
   }
 

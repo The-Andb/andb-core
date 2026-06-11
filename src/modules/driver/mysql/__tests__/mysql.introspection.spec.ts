@@ -126,12 +126,12 @@ describe('MysqlIntrospectionService', () => {
   });
 
   describe('getTriggerDDL', () => {
-    it('should return sanitized trigger DDL', async () => {
+    it('should return trigger DDL with definer', async () => {
       mockDriver.query.mockResolvedValue([{
         'SQL Original Statement': 'CREATE DEFINER=`root`@`localhost` TRIGGER `t` AFTER INSERT ON `u` FOR EACH ROW BEGIN END'
       }]);
       const ddl = await service.getTriggerDDL('db', 't');
-      expect(ddl).toBe('CREATE TRIGGER `t` AFTER INSERT ON `u` FOR EACH ROW BEGIN END');
+      expect(ddl).toBe('CREATE DEFINER=`root`@`localhost` TRIGGER `t` AFTER INSERT ON `u` FOR EACH ROW BEGIN END');
     });
   });
 

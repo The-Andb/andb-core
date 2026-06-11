@@ -1,6 +1,23 @@
 import { IDiffOperation, ITableDiff, IObjectDiff } from '../../../common/interfaces/diff.interface';
 
 export class MysqlMigrator {
+  cleanDefiner(ddl: string): string {
+    if (!ddl) return '';
+    const definerPattern = `DEFINER\\s*=\\s*(?:'[^']*'|"[^"]*"|\\\`[^\\\`]*\\\`|[^\\s@]+)+(?:@(?:'[^']*'|"[^"]*"|\\\`[^\\\`]*\\\`|[^\\s@\\(\\);]+)+)?`;
+    
+    const beginMatch = ddl.match(/(\s)BEGIN(\s|$)/i);
+    if (beginMatch && beginMatch.index !== undefined) {
+      let header = ddl.substring(0, beginMatch.index).trim();
+      const body = ddl.substring(beginMatch.index).trim();
+      const re = new RegExp(definerPattern, 'gi');
+      header = header.replace(re, '').replace(/[ \t]{2,}/g, ' ');
+      return header + ' ' + body;
+    }
+    
+    const reFallback = new RegExp(definerPattern, 'gi');
+    return ddl.replace(reFallback, '');
+  }
+
   generateObjectSQL(diff: IObjectDiff): string[] {
     const { type, name, operation, definition } = diff;
     const statements: string[] = [];
@@ -10,7 +27,8 @@ export class MysqlMigrator {
     }
 
     if ((operation === 'CREATE' || operation === 'REPLACE') && definition) {
-      statements.push(definition.endsWith(';') ? definition : definition + ';');
+      const cleanDef = this.cleanDefiner(definition);
+      statements.push(cleanDef.endsWith(';') ? cleanDef : cleanDef + ';');
     }
 
     return statements;

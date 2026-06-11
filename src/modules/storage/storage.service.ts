@@ -95,7 +95,19 @@ export class StorageService {
 
   // --- DDL Exports ---
 
-  async saveDdlExport(environment: string, databaseName: string, exportType: string, exportName: string, ddlContent: string, databaseType: string = 'mysql') {
+  async saveDdlExport(
+    environment: string,
+    databaseName: string,
+    exportType: string,
+    exportName: string,
+    ddlContent: string,
+    databaseType: string = 'mysql',
+    definer?: string,
+    schemaCharset?: string,
+    schemaCollation?: string,
+    ddlCharset?: string,
+    ddlCollation?: string
+  ) {
     return this.ensureStrategy().saveDdlExport({
       id: `${environment}_${databaseType}_${databaseName}_${exportType}_${exportName}`.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase(),
       environment,
@@ -103,13 +115,42 @@ export class StorageService {
       database_type: databaseType,
       export_type: exportType,
       export_name: exportName,
-      ddl_content: ddlContent
+      ddl_content: ddlContent,
+      definer,
+      schema_charset: schemaCharset,
+      schema_collation: schemaCollation,
+      ddl_charset: ddlCharset,
+      ddl_collation: ddlCollation
     });
   }
 
   // Alias for backward compatibility with ExporterService
-  async saveDDL(environment: string, databaseName: string, exportType: string, exportName: string, ddlContent: string, databaseType: string = 'mysql') {
-    return this.saveDdlExport(environment, databaseName, exportType, exportName, ddlContent, databaseType);
+  async saveDDL(
+    environment: string,
+    databaseName: string,
+    exportType: string,
+    exportName: string,
+    ddlContent: string,
+    databaseType: string = 'mysql',
+    definer?: string,
+    schemaCharset?: string,
+    schemaCollation?: string,
+    ddlCharset?: string,
+    ddlCollation?: string
+  ) {
+    return this.saveDdlExport(
+      environment,
+      databaseName,
+      exportType,
+      exportName,
+      ddlContent,
+      databaseType,
+      definer,
+      schemaCharset,
+      schemaCollation,
+      ddlCharset,
+      ddlCollation
+    );
   }
 
   async deleteDDL(environment: string, databaseName: string, exportType: string, exportName: string) {
@@ -125,7 +166,12 @@ export class StorageService {
     return rows.map((r: any) => ({
       name: r.export_name,
       content: r.ddl_content,
-      updated_at: r.exported_at
+      definer: r.definer,
+      updated_at: r.exported_at,
+      schema_charset: r.schema_charset,
+      schema_collation: r.schema_collation,
+      ddl_charset: r.ddl_charset,
+      ddl_collation: r.ddl_collation
     }));
   }
 

@@ -31,4 +31,12 @@ export class SqliteMonitoringService implements IMonitoringService {
   async getTransactions(): Promise<any> {
     return [];
   }
+
+  async getPulse(): Promise<{ threadsRunning: number; lockWaits: number }> {
+    return { threadsRunning: 1, lockWaits: 0 };
+  }
+
+  async killThread(threadId: number): Promise<void> {
+    // No-op for SQLite
+  }
 }

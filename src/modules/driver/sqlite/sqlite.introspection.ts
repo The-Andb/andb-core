@@ -45,7 +45,7 @@ export class SqliteIntrospectionService implements IIntrospectionService {
   }
 
   private _normalizeDDL(ddl: string): string {
-    return this.parser.cleanDefiner(ddl || '');
+    return ddl || '';
   }
 
   async getTableDDL(_dbName: string, tableName: string): Promise<string> {

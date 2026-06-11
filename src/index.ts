@@ -29,6 +29,7 @@ export * from './modules/safety/impact-analysis.service';
 export * from './modules/exporter/exporter.service';
 export * from './modules/reporter/reporter.service';
 export * from './modules/parser/parser.service';
+export * from './modules/parser/dialect-translator.service';
 export * from './modules/orchestration/orchestration.service';
 export * from './modules/orchestration/schema-orchestrator.service';
 export * from './modules/orchestration/security-orchestrator.service';

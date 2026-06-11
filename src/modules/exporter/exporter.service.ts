@@ -40,6 +40,21 @@ export class ExporterService {
       const introspection = driver.getIntrospectionService();
       const dbName = connection.config.database || 'default';
 
+      let schemaCharset = '';
+      let schemaCollation = '';
+      try {
+        const schemaInfo = await driver.query(
+          "SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?",
+          [dbName]
+        );
+        if (schemaInfo && schemaInfo[0]) {
+          schemaCharset = schemaInfo[0].DEFAULT_CHARACTER_SET_NAME || '';
+          schemaCollation = schemaInfo[0].DEFAULT_COLLATION_NAME || '';
+        }
+      } catch (err: any) {
+        this.logger.warn(`Failed to retrieve database schema charset/collation: ${err.message}`);
+      }
+
       const allTypes = ['TABLE', 'VIEW', 'PROCEDURE', 'FUNCTION', 'TRIGGER', 'EVENT'] as const;
       // If typeFilter is provided and not 'all', only process matching type(s)
       const normalizedFilter = (typeFilter && typeFilter.toLowerCase() !== 'all')
@@ -74,7 +89,7 @@ export class ExporterService {
             let ddl = await this._getDDL(introspection, dbName, type, name);
 
             if (!ddl) {
-              emptyDDLCount++;
+               emptyDDLCount++;
             }
 
             // Legacy parity: Normalize SQL keywords to UPPERCASE before saving
@@ -84,9 +99,33 @@ export class ExporterService {
               ddl = this.parser.uppercaseKeywords(ddl);
             }
 
+            let ddlCharset = '';
+            let ddlCollation = '';
+            if (type === 'TABLE' && ddl) {
+              try {
+                const parsed = this.parser.parseTableDetailed(ddl);
+                if (parsed && parsed.options) {
+                  ddlCharset = parsed.options.charset || '';
+                  ddlCollation = parsed.options.collation || '';
+                }
+              } catch (e) {}
+            }
+
             exportedNames.push(name);
             // Save to storage — always save so it appears in sidebar list
-            await this.storageService.saveDDL(envName, dbName, pluralType, name, ddl || '', connection.type);
+            await this.storageService.saveDDL(
+              envName,
+              dbName,
+              pluralType,
+              name,
+              ddl || '',
+              connection.type,
+              undefined,
+              schemaCharset,
+              schemaCollation,
+              ddlCharset || null,
+              ddlCollation || null
+            );
             savedCount++;
 
             if (onProgress) {

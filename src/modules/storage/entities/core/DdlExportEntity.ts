@@ -9,9 +9,14 @@ export class DdlExportEntity {
   @Column('text', { default: 'mysql' }) database_type!: string;
   @Column('text', { default: '' }) export_type!: string;
   @Column('text', { default: '' }) export_name!: string;
+  @Column('text', { nullable: true }) schema_charset!: string | null;
+  @Column('text', { nullable: true }) schema_collation!: string | null;
+  @Column('text', { nullable: true }) ddl_charset!: string | null;
+  @Column('text', { nullable: true }) ddl_collation!: string | null;
   @Column('text', { nullable: true }) ddl_content!: string;
   @Column('text', { nullable: true }) checksum!: string;
   @Column('text', { nullable: true }) file_path!: string;
+  @Column('text', { nullable: true }) definer!: string | null;
   @CreateDateColumn({ type: 'datetime' }) exported_at!: Date;
   @Column('datetime', { nullable: true }) updated_at!: Date;
 }

@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 const { getLogger } = require('andb-logger');
 import { ProjectConfigService } from '../../config/project-config.service';
+import { STORAGE_ENVIRONMENTS_DIR } from '../strategy/base-storage.strategy';
 
 export class VaultMigrationService {
   private readonly logger = getLogger({ logName: 'VaultMigrationService' });
@@ -11,13 +12,24 @@ export class VaultMigrationService {
     private readonly configService: ProjectConfigService,
     projectBaseDir: string
   ) {
-    this.baseDir = path.join(projectBaseDir, 'db');
+    this.baseDir = path.join(projectBaseDir, STORAGE_ENVIRONMENTS_DIR);
+
+    // Auto-rename legacy 'db' directory to the environments folder if it exists
+    const legacyDbDir = path.join(projectBaseDir, 'db');
+    if (fs.existsSync(legacyDbDir) && !fs.existsSync(this.baseDir)) {
+      try {
+        fs.renameSync(legacyDbDir, this.baseDir);
+        this.logger.info(`🔄 Auto-renamed legacy directory 'db' to '${STORAGE_ENVIRONMENTS_DIR}'`);
+      } catch (err: any) {
+        this.logger.error(`❌ Failed to rename legacy directory 'db' to '${STORAGE_ENVIRONMENTS_DIR}': ${err.message}`);
+      }
+    }
   }
 
   /**
    * Migrate legacy vault structure to engine-isolated structure
-   * Old: db/{env}/{dbName}/...
-   * New: db/{env}/{engine}/{dbName}/...
+   * Old: environments/{env}/{dbName}/...
+   * New: environments/{env}/{engine}/{dbName}/...
    */
   async migrate() {
     if (!fs.existsSync(this.baseDir)) return;

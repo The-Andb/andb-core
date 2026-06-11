@@ -24,10 +24,8 @@ export class ParserService {
   cleanDefiner(ddl: string): string {
     if (!ddl || typeof ddl !== 'string') return '';
 
-    // Regex components
-    const userPart = `(?:'[^']+'|\`[^\`]+\`|"[^"]+"|[a-zA-Z0-9_]+)`;
-    const hostPart = `(?:@(?:'[^']+'|\`[^\`]+\`|"[^"]+"|[a-zA-Z0-9_\\.\%]+))?`;
-    const definerPattern = `DEFINER\\s*=\\s*${userPart}${hostPart}`;
+    // Robust definer regex pattern that handles complex usernames, quotes, and hosts/wildcards
+    const definerPattern = `DEFINER\\s*=\\s*(?:'[^']*'|"[^"]*"|\`[^\`]*\`|[^\\s@]+)+(?:@(?:'[^']*'|"[^"]*"|\`[^\`]*\`|[^\\s@\\(\\);]+)+)?`;
 
     // Split routine to separate header and body
     const parts = this.splitRoutine(ddl);
@@ -40,7 +38,7 @@ export class ParserService {
       header = header.replace(re, '');
 
       // Cleanup double spaces created by removal
-      header = header.replace(/\s{2,}/g, ' ');
+      header = header.replace(/[ \t]{2,}/g, ' ');
 
       return header + ' ' + body;
     }
@@ -86,6 +84,32 @@ export class ParserService {
       // Collapse whitespace: tabs, newlines -> space
       processed = processed.replace(/\s+/g, ' ').trim();
     }
+
+    return processed;
+  }
+
+  /**
+   * Aggressive normalization for Stored Procedures, Functions, Triggers, and Views
+   */
+  normalizeRoutineDDL(ddl: string): string {
+    if (!ddl || typeof ddl !== 'string') return '';
+    let processed = ddl;
+
+    // 1. Clean definer
+    processed = this.cleanDefiner(processed);
+
+    // 2. Aggressive comment removal
+    processed = processed.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
+    // 3. Remove CHARACTER SET and COLLATE to avoid environmental noise
+    processed = processed.replace(/CHARACTER SET [a-zA-Z0-9_]+/gi, '')
+                         .replace(/COLLATE [a-zA-Z0-9_]+/gi, '');
+
+    // 4. Clean backticks, quotes, etc.
+    processed = processed.replace(/[`'"]/g, '');
+
+    // 5. Lowercase identifiers but collapse whitespace
+    processed = processed.replace(/\s+/g, ' ').trim().toLowerCase();
 
     return processed;
   }
@@ -464,18 +488,29 @@ export class ParserService {
           const pkSet = new Set(ast.indexes.filter((i: any) => i.type === 'PRIMARY').flatMap((i: any) => i.columns));
           const uniqueSet = new Set(ast.indexes.filter((i: any) => i.type === 'UNIQUE').flatMap((i: any) => i.columns));
 
-          const mappedColumns = ast.columns.map((c: any) => ({
-             name: c.name,
-             type: c.dataType.toUpperCase(),
-             pk: pkSet.has(c.name),
-             notNull: !c.nullable,
-             unique: uniqueSet.has(c.name),
-             unsigned: !!c.unsigned,
-             autoIncrement: c.autoIncrement,
-             default: c.defaultValue,
-             comment: c.comment,
-             definition: c.rawDefinition
-          }));
+          const mappedColumns = ast.columns.map((c: any) => {
+             let fullType = c.dataType.toUpperCase();
+             if (c.length != null) {
+                fullType += `(${c.length}`;
+                if (c.scale != null) {
+                   fullType += `,${c.scale}`;
+                }
+                fullType += `)`;
+             }
+             return {
+                name: c.name,
+                type: fullType,
+                pk: pkSet.has(c.name),
+                notNull: !c.nullable,
+                unique: uniqueSet.has(c.name),
+                unsigned: !!c.unsigned,
+                autoIncrement: c.autoIncrement,
+                default: c.defaultValue,
+                comment: c.comment,
+                collate: c.collate,
+                definition: c.rawDefinition
+             };
+          });
 
           return {
              tableName: ast.tableName,
@@ -729,5 +764,18 @@ export class ParserService {
     if (up.includes('CREATE INDEX') || up.includes('CREATE UNIQUE INDEX')) return 'INDEX';
 
     return 'UNKNOWN';
+  }
+
+  /**
+   * Translate DDL from source dialect to target dialect
+   */
+  translateDDL(ddl: string, fromDialect: string = 'mysql', toDialect: string = 'postgres'): string {
+    const { DialectTranslatorService } = require('./dialect-translator.service');
+    const translator = new DialectTranslatorService(this);
+    const type = this.detectObjectType(ddl);
+    if (type === 'TABLE') {
+      return translator.translateTable(ddl, fromDialect, toDialect);
+    }
+    return ddl;
   }
 }

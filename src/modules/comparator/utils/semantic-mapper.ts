@@ -50,8 +50,30 @@ export class SemanticMapper {
    * Check if two column properties are semantically equal across engines
    */
   static arePropertiesEqual(prop: string, val1: any, val2: any, srcDialect: string, destDialect: string): boolean {
+    const isNullOrEmpty = (v: any) => v === null || v === undefined || String(v).trim() === '' || String(v).toLowerCase() === 'null';
+
     if (prop === 'type') {
+      if (srcDialect === destDialect) {
+        const normType = (v: any) => {
+          return String(isNullOrEmpty(v) ? '' : v)
+            .toUpperCase()
+            .replace(/\s+/g, ' ')
+            .replace(/(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)\(\d+\)/gi, '$1')
+            .replace(/,\s*/g, ',')
+            .trim();
+        };
+        return normType(val1) === normType(val2);
+      }
       return this.normalizeType(val1, srcDialect) === this.normalizeType(val2, destDialect);
+    }
+
+    if (prop === 'collate') {
+      const defaultCollations = ['latin1_swedish_ci', 'utf8mb4_0900_ai_ci'];
+      const c1 = val1 ? String(val1).toLowerCase().trim() : null;
+      const c2 = val2 ? String(val2).toLowerCase().trim() : null;
+      if (!c1 && defaultCollations.includes(c2 || '')) return true;
+      if (!c2 && defaultCollations.includes(c1 || '')) return true;
+      return c1 === c2;
     }
 
     if (prop === 'autoIncrement') {
@@ -60,11 +82,32 @@ export class SemanticMapper {
     }
 
     if (prop === 'default' || prop === 'defaultValue') {
-      if (!val1 && !val2) return true;
-      if (!val1 || !val2) return false;
-      const v1 = String(val1).replace(/::[a-z ]+$/i, '').replace(/^'|'$/g, '');
-      const v2 = String(val2).replace(/::[a-z ]+$/i, '').replace(/^'|'$/g, '');
-      return v1 === v2;
+      if (isNullOrEmpty(val1) && isNullOrEmpty(val2)) return true;
+      if (isNullOrEmpty(val1) || isNullOrEmpty(val2)) return false;
+
+      const normDefault = (v: any) => {
+        let s = String(v).trim()
+          .replace(/::[a-z_ ]+$/i, '') // strip postgres type casts
+          .replace(/^['"`]|['"`]$/g, ''); // strip outer quotes
+        
+        if (s.toLowerCase().endsWith('()')) {
+          s = s.slice(0, -2);
+        }
+        
+        const upper = s.toUpperCase();
+        if (upper === 'NOW' || upper === 'CURRENT_TIMESTAMP') return 'CURRENT_TIMESTAMP';
+        return upper;
+      };
+
+      return normDefault(val1) === normDefault(val2);
+    }
+
+    if (prop === 'comment') {
+      const normComment = (v: any) => {
+        if (isNullOrEmpty(v)) return '';
+        return String(v).trim().replace(/^['"`]|['"`]$/g, '');
+      };
+      return normComment(val1) === normComment(val2);
     }
 
     // Default to strict equality

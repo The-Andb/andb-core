@@ -192,6 +192,65 @@ describe('ComparatorService', () => {
       const diff = service.compareTables(srcDDL, destDDL);
       expect(diff.hasChanges).toBe(false);
     });
+
+    it('should detect column position changes (FIRST and AFTER)', () => {
+      const srcDDL = `CREATE TABLE \`users\` (
+        \`name\` varchar(255),
+        \`id\` int
+      )`;
+      const destDDL = `CREATE TABLE \`users\` (
+        \`id\` int,
+        \`name\` varchar(255)
+      )`;
+      const diff = service.compareTables(srcDDL, destDDL, 'mysql', 'mysql');
+      expect(diff.hasChanges).toBe(true);
+      expect(diff.operations).toContainEqual(expect.objectContaining({
+        type: 'MODIFY',
+        target: 'COLUMN',
+        name: 'name',
+        definition: expect.stringContaining('FIRST'),
+      }));
+      expect(diff.operations).toContainEqual(expect.objectContaining({
+        type: 'MODIFY',
+        target: 'COLUMN',
+        name: 'id',
+        definition: expect.stringContaining('AFTER `name`'),
+      }));
+    });
+
+    it('should detect table options changes', () => {
+      const srcDDL = `CREATE TABLE \`users\` (
+        \`id\` int
+      ) ENGINE=InnoDB COMMENT='New Comment'`;
+      const destDDL = `CREATE TABLE \`users\` (
+        \`id\` int
+      ) ENGINE=MyISAM COMMENT='Old Comment'`;
+      const diff = service.compareTables(srcDDL, destDDL, 'mysql', 'mysql');
+      expect(diff.hasChanges).toBe(true);
+      expect(diff.operations).toContainEqual(expect.objectContaining({
+        type: 'MODIFY',
+        target: 'OPTION',
+        name: 'engine',
+        definition: expect.stringMatching(/InnoDB/i),
+      }));
+      expect(diff.operations).toContainEqual(expect.objectContaining({
+        type: 'MODIFY',
+        target: 'OPTION',
+        name: 'comment',
+        definition: expect.stringMatching(/New Comment/i),
+      }));
+    });
+
+    it('should normalize defaults and comments ignoring wrapping quotes', () => {
+      const srcDDL = `CREATE TABLE \`users\` (
+        \`id\` int DEFAULT CURRENT_TIMESTAMP COMMENT 'Col Comment'
+      )`;
+      const destDDL = `CREATE TABLE \`users\` (
+        \`id\` int DEFAULT current_timestamp() COMMENT "Col Comment"
+      )`;
+      const diff = service.compareTables(srcDDL, destDDL, 'mysql', 'mysql');
+      expect(diff.hasChanges).toBe(false);
+    });
   });
 
   describe('compareGenericDDL', () => {

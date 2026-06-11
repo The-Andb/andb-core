@@ -91,4 +91,32 @@ describe('StorageService', () => {
       expect(mockStrategy.close).toHaveBeenCalled();
     });
   });
+
+  describe('DDL operations with definer', () => {
+    it('should forward definer parameter in saveDdlExport', async () => {
+      await service.saveDdlExport('DEV', 'mydb', 'PROCEDURES', 'get_users', 'CREATE PROCEDURE...', 'mysql', 'root@localhost');
+      expect(mockStrategy.saveDdlExport).toHaveBeenCalledWith(expect.objectContaining({
+        environment: 'DEV',
+        database_name: 'mydb',
+        export_type: 'PROCEDURES',
+        export_name: 'get_users',
+        ddl_content: 'CREATE PROCEDURE...',
+        database_type: 'mysql',
+        definer: 'root@localhost'
+      }));
+    });
+
+    it('should forward definer parameter in saveDDL alias', async () => {
+      await service.saveDDL('DEV', 'mydb', 'PROCEDURES', 'get_users', 'CREATE PROCEDURE...', 'mysql', 'root@localhost');
+      expect(mockStrategy.saveDdlExport).toHaveBeenCalledWith(expect.objectContaining({
+        environment: 'DEV',
+        database_name: 'mydb',
+        export_type: 'PROCEDURES',
+        export_name: 'get_users',
+        ddl_content: 'CREATE PROCEDURE...',
+        database_type: 'mysql',
+        definer: 'root@localhost'
+      }));
+    });
+  });
 });

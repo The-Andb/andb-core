@@ -63,7 +63,7 @@ export class MysqlIntrospectionService implements IIntrospectionService {
   // --- DDL Retrieval ---
 
   private _normalizeDDL(ddl: string): string {
-    return this.parser.cleanDefiner(ddl); // Basic cleaning for now, extend if needed
+    return ddl;
   }
 
   /**
@@ -232,13 +232,7 @@ export class MysqlIntrospectionService implements IIntrospectionService {
       const rawDDL = this._extractDDLFromRow(row, 'SQL Original Statement', 'TRIGGER', triggerName);
       if (!rawDDL) return '';
 
-      // Trigger cleanup (Naive regex port from legacy)
-      const ddl = rawDDL
-        .replace(/\sDEFINER=`[^`]+`@`[^`]+`\s/g, ' ')
-        .replace(/\sCOLLATE\s+\w+\s/, ' ')
-        .replace(/\sCHARSET\s+\w+\s/, ' ');
-
-      return this._normalizeDDL(ddl);
+      return this._normalizeDDL(rawDDL);
     } catch (err: any) {
       console.error(`[Introspection] Failed to get TRIGGER DDL for "${triggerName}": ${err.message}`);
       return '';

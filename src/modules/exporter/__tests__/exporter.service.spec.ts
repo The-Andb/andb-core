@@ -45,6 +45,9 @@ describe('ExporterService', () => {
         type: ConnectionType.MYSQL,
         config: { database: 'test_db' },
       }),
+      getCurrentProject: jest.fn().mockReturnValue({
+        name: 'test_project'
+      }),
     } as any;
 
     storageService = {
@@ -77,6 +80,7 @@ describe('ExporterService', () => {
       expect(storageService.saveDDL).toHaveBeenCalledWith(
         'dev', 'test_db', 'TABLES', 'users',
         expect.stringContaining('CREATE TABLE'),
+        'mysql'
       );
     });
 
@@ -89,20 +93,6 @@ describe('ExporterService', () => {
       mockIntrospection.listTables.mockRejectedValue(new Error('Query failed'));
       await expect(service.exportSchema('dev')).rejects.toThrow('Query failed');
       expect(mockDriver.disconnect).toHaveBeenCalled();
-    });
-
-    it('should create directories if they do not exist', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
-      await service.exportSchema('dev');
-      expect(fs.mkdirSync).toHaveBeenCalled();
-    });
-
-    it('should write empty DDL to file for consistency (parity fix)', async () => {
-      mockIntrospection.getTableDDL.mockResolvedValue('');
-      await service.exportSchema('dev');
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('users.sql'), '',
-      );
     });
 
     it('should export with a specific name filter', async () => {

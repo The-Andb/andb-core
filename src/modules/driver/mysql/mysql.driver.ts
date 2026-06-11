@@ -199,4 +199,27 @@ export class MysqlDriver implements IDatabaseDriver {
     console.log('[MysqlDriver] Generated Script:\n', sql);
     return sql;
   }
+
+  getThreadId(): number | undefined {
+    return this.connection?.threadId;
+  }
+
+  async destroy(): Promise<void> {
+    if (this.connection) {
+      try {
+        (this.connection as any).destroy();
+      } catch (err) {
+        // ignore
+      }
+      this.connection = null;
+    }
+    if (this.sshTunnel) {
+      try {
+        this.sshTunnel.close();
+      } catch (err) {
+        // ignore
+      }
+      this.sshTunnel = null;
+    }
+  }
 }

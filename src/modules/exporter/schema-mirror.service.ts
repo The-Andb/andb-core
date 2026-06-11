@@ -12,8 +12,8 @@ export class SchemaMirrorService {
   /**
    * Mirrors the SQLite state to the filesystem in the specified base directory.
    */
-  async mirrorToFilesystem(envName: string, dbName: string, baseDir: string, databaseType: string = 'mysql', typeFilter?: string) {
-    this.logger.info(`mirroring ${envName}/${dbName} [${databaseType}] to ${baseDir} (Filter: ${typeFilter || 'ALL'})`);
+  async mirrorToFilesystem(envName: string, dbName: string, baseDir: string, databaseType: string = 'mysql', typeFilter?: string, specificName?: string) {
+    this.logger.info(`mirroring ${envName}/${dbName} [${databaseType}] to ${baseDir} (Filter: ${typeFilter || 'ALL'}${specificName ? `, Object: ${specificName}` : ''})`);
 
     const allTypes = ['TABLES', 'VIEWS', 'PROCEDURES', 'FUNCTIONS', 'TRIGGERS', 'EVENTS'];
     
@@ -30,10 +30,21 @@ export class SchemaMirrorService {
     }
 
     for (const type of types) {
-      const objects = await this.storageService.getDDLObjects(envName, dbName, type, databaseType);
       const targetDir = path.join(baseDir, envName, databaseType.toLowerCase(), dbName, type.toLowerCase());
 
       this._ensureDir(targetDir);
+
+      if (specificName) {
+        const content = await this.storageService.getDDL(envName, dbName, type, specificName, databaseType);
+        if (content !== null) {
+          const fileName = `${specificName}.sql`;
+          const filePath = path.join(targetDir, fileName);
+          fs.writeFileSync(filePath, content || '');
+        }
+        continue;
+      }
+
+      const objects = await this.storageService.getDDLObjects(envName, dbName, type, databaseType);
 
       // Track existing files to identify deletions
       const existingFiles = new Set(

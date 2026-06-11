@@ -1,11 +1,13 @@
 const { getLogger } = require('andb-logger');
 import { ProjectConfigService } from '../config/project-config.service';
 import { GitOrchestrator } from './git-orchestrator.service';
+import { STORAGE_ENVIRONMENTS_DIR } from '../storage/strategy/base-storage.strategy';
 import { ISafetyReport, SafetyLevel } from '../../common/interfaces/schema.interface';
 import { ConnectionUtil } from '../../common/utils/connection.util';
 
 export class SchemaOrchestrator {
   private readonly logger = getLogger({ logName: 'SchemaOrchestrator' });
+  private activeQuerySessions = new Map<string, any>();
 
   constructor(
     private readonly configService: ProjectConfigService,
@@ -30,6 +32,7 @@ export class SchemaOrchestrator {
         env,
         db: db || 'default',
         typeFilter: type,
+        specificName: name,
         message: null
       });
     }
@@ -209,14 +212,7 @@ export class SchemaOrchestrator {
       }
     }
 
-    const safeObjects = itemsToProcess.filter((obj: any) =>
-      obj.status !== 'DEPRECATED' && obj.status !== 'deprecated' && obj.status !== 'missing_in_source'
-    );
-
-    if (safeObjects.length === 0) {
-      this.logger.info('All selected objects are DEPRECATED (DROP). Migration skipped by safety rule.');
-      return { success: true, successful: [], failed: [], dryRun, safetyLevel: 'safe', totalStatements: 0, skippedDrops: objects.length };
-    }
+    const safeObjects = itemsToProcess;
 
     const srcConn = this.configService.getConnection(srcEnv);
     const srcDbName = srcConn?.config?.database || 'default';
@@ -306,7 +302,10 @@ export class SchemaOrchestrator {
           continue;
         }
 
-        const statements = Array.isArray(obj.ddl) ? obj.ddl : [obj.ddl];
+        const statements = (Array.isArray(obj.ddl) ? obj.ddl : [obj.ddl]).filter(Boolean);
+        if (statements.length === 0) {
+          throw new Error(`No SQL statements found to execute for object: ${obj.name} (${obj.type})`);
+        }
 
         // Individual safety check per object if needed, though global validation already ran
         this.migrator.checkSafety(statements, force);
@@ -385,7 +384,7 @@ export class SchemaOrchestrator {
       let relPath: string | undefined = undefined;
       if (executedSqlBlocks.length > 0 && historyId) {
         const dbType = (destConn.type || 'mysql').toLowerCase();
-        const baseRelPath = `db/${destEnv}/${dbType}/${dbName}/.history/migration_${historyId}.sql`;
+        const baseRelPath = `${STORAGE_ENVIRONMENTS_DIR}/${destEnv}/${dbType}/${dbName}/.history/migration_${historyId}.sql`;
         relPath = this.storageService.strategy?._getScopedPath(baseRelPath) || baseRelPath;
         const fullContent = executedSqlBlocks.join('\n\n');
         try {
@@ -674,11 +673,40 @@ export class SchemaOrchestrator {
   }
 
   async executeQuery(payload: any) {
-    const { connection, sql, params = [] } = payload;
-    const driver = await this.getDriverFromConnection(connection);
+    const { connection, sql, params = [], sessionId } = payload;
+    let driver: any;
+    let isNewSession = false;
+
+    if (sessionId) {
+      if (this.activeQuerySessions.has(sessionId)) {
+        driver = this.activeQuerySessions.get(sessionId);
+      } else {
+        driver = await this.getDriverFromConnection(connection);
+        await driver.connect();
+        this.activeQuerySessions.set(sessionId, driver);
+        isNewSession = true;
+      }
+    } else {
+      driver = await this.getDriverFromConnection(connection);
+      await driver.connect();
+    }
+
+    // Handle Autocommit toggles on stateful sessions
+    if (payload.autocommit !== undefined) {
+      try {
+        await driver.query(`SET autocommit = ${payload.autocommit ? 1 : 0};`);
+      } catch (e) {
+        // ignore if not supported by driver
+      }
+    } else if (isNewSession && payload.autocommit === false) {
+      try {
+        await driver.query('SET autocommit = 0;');
+      } catch (e) {
+        // ignore
+      }
+    }
 
     try {
-      await driver.connect();
       const rows = await driver.query(sql, params);
       return {
         success: true,
@@ -690,6 +718,132 @@ export class SchemaOrchestrator {
         success: false,
         error: err.message,
       };
+    } finally {
+      if (!sessionId) {
+        await driver.disconnect();
+      }
+    }
+  }
+
+  async closeQuerySession(payload: any) {
+    const { sessionId } = payload;
+    if (sessionId && this.activeQuerySessions.has(sessionId)) {
+      const driver = this.activeQuerySessions.get(sessionId);
+      try {
+        await driver.disconnect();
+      } catch (err) {
+        // ignore
+      }
+      this.activeQuerySessions.delete(sessionId);
+    }
+    return { success: true };
+  }
+
+  async cancelQuery(payload: any) {
+    const { sessionId, connection } = payload;
+    if (sessionId && this.activeQuerySessions.has(sessionId)) {
+      const driver = this.activeQuerySessions.get(sessionId);
+      const threadId = typeof driver.getThreadId === 'function' ? driver.getThreadId() : undefined;
+      
+      this.logger.info(`[CancelQuery] Cancelling query for session: ${sessionId}, threadId: ${threadId}`);
+      
+      try {
+        if (typeof driver.destroy === 'function') {
+          await driver.destroy();
+        } else {
+          await driver.disconnect();
+        }
+      } catch (err) {
+        // ignore
+      }
+      
+      this.activeQuerySessions.delete(sessionId);
+
+      if (threadId && connection) {
+        try {
+          const killDriver = await this.getDriverFromConnection(connection);
+          await killDriver.connect();
+          await killDriver.query(`KILL QUERY ${threadId}`);
+          await killDriver.disconnect();
+        } catch (killErr: any) {
+          this.logger.warn(`Failed to execute KILL QUERY: ${killErr.message}`);
+        }
+      }
+    }
+    return { success: true };
+  }
+
+  async monitorPulse(payload: any) {
+    const { connection } = payload;
+    const driver = await this.getDriverFromConnection(connection);
+    try {
+      await driver.connect();
+      const monitoring = (driver as any).getMonitoringService();
+      if (monitoring && typeof monitoring.getPulse === 'function') {
+        return await monitoring.getPulse();
+      }
+      return { threadsRunning: 0, lockWaits: 0 };
+    } finally {
+      await driver.disconnect();
+    }
+  }
+
+  async monitorSnapshot(payload: any) {
+    const { connection } = payload;
+    const driver = await this.getDriverFromConnection(connection);
+    try {
+      await driver.connect();
+      const monitoring = (driver as any).getMonitoringService();
+      
+      const processList = await monitoring.getProcessList();
+      
+      let lockTree: any[] = [];
+      try {
+        const trx = await monitoring.getTransactions();
+        if (Array.isArray(trx)) {
+          lockTree = trx.map((t: any) => ({
+            id: t.trx_id,
+            state: t.trx_state,
+            started: t.trx_started,
+            query: t.trx_query,
+            threadId: t.trx_mysql_thread_id
+          }));
+        }
+      } catch (e) {
+        // Fallback if transaction schema inaccessible
+      }
+
+      return {
+        lockTree,
+        processList: Array.isArray(processList) ? processList.map((p: any) => ({
+          id: p.Id ?? p.id ?? p.ID ?? 0,
+          user: p.User ?? p.user ?? '',
+          host: p.Host ?? p.host ?? '',
+          db: p.Db ?? p.db ?? '',
+          command: p.Command ?? p.command ?? '',
+          time: p.Time ?? p.time ?? 0,
+          state: p.State ?? p.state ?? '',
+          info: p.Info ?? p.info ?? ''
+        })) : []
+      };
+    } finally {
+      await driver.disconnect();
+    }
+  }
+
+  async monitorKill(payload: any) {
+    const { connection, threadId } = payload;
+    if (!threadId) throw new Error('threadId is required for monitor-kill');
+    const driver = await this.getDriverFromConnection(connection);
+    try {
+      await driver.connect();
+      const monitoring = (driver as any).getMonitoringService();
+      if (monitoring && typeof monitoring.killThread === 'function') {
+        await monitoring.killThread(parseInt(threadId, 10));
+      } else {
+        await driver.query(`KILL ${parseInt(threadId, 10)}`);
+      }
+      return { success: true };
     } finally {
       await driver.disconnect();
     }

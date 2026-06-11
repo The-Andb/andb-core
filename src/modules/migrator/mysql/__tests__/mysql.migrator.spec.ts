@@ -105,7 +105,19 @@ describe('MysqlMigrator', () => {
 
       const sqls = migrator.generateObjectSQL(diff);
       expect(sqls[0]).toBe('CREATE TRIGGER t1 AFTER INSERT ON users FOR EACH ROW BEGIN END;');
-      expect(sqls[0].endsWith(';;')).toBe(false);
+    });
+
+    it('should strip DEFINER during CREATE/REPLACE operations', () => {
+      const diff: IObjectDiff = {
+        type: 'PROCEDURE',
+        name: 'my_proc',
+        operation: 'CREATE',
+        definition: 'CREATE DEFINER=`admin`@`localhost` PROCEDURE my_proc() BEGIN END'
+      };
+
+      const sqls = migrator.generateObjectSQL(diff);
+      expect(sqls.length).toBe(1);
+      expect(sqls[0]).toBe('CREATE PROCEDURE my_proc() BEGIN END;');
     });
   });
 

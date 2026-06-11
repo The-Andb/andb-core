@@ -75,7 +75,12 @@ export class MysqlAstParser implements ISqlAstParser {
           const defVal = this.extractDefaultValue(def.default_val);
           
           let definition = `${dataType}`;
-          if (def.definition.length != null) {
+          if (dataType.toUpperCase() === 'ENUM' || dataType.toUpperCase() === 'SET') {
+             if (def.definition.expr && Array.isArray(def.definition.expr.value)) {
+                const enumVals = def.definition.expr.value.map((v: any) => `'${this.unwrapAstValue(v)}'`).join(',');
+                definition += `(${enumVals})`;
+             }
+          } else if (def.definition.length != null) {
              definition += `(${def.definition.length}`;
              if (def.definition.scale != null) {
                 definition += `,${def.definition.scale}`;
@@ -97,7 +102,15 @@ export class MysqlAstParser implements ISqlAstParser {
              }
           } else {
              if (isNotNull) definition += ' NOT NULL';
-             if (defVal !== null) definition += ` DEFAULT ${defVal}`;
+             if (defVal !== null) {
+                const isStringDefault = def.default_val && def.default_val.value &&
+                   ['single_quote_string', 'double_quote_string', 'string'].includes(def.default_val.value.type);
+                if (isStringDefault && !defVal.startsWith("'") && !defVal.startsWith('"')) {
+                   definition += ` DEFAULT '${defVal.replace(/'/g, "''")}'`;
+                } else {
+                   definition += ` DEFAULT ${defVal}`;
+                }
+             }
              if (def.auto_increment) definition += ' AUTO_INCREMENT';
           }
 
@@ -109,6 +122,8 @@ export class MysqlAstParser implements ISqlAstParser {
           const isUnsigned = Array.isArray(def.definition.suffix) && 
                              def.definition.suffix.some((s: any) => String(s).toUpperCase() === 'UNSIGNED');
 
+          const collateVal = def.collate?.collate?.name || def.default_val?.value?.collate?.collate?.name || null;
+
           columns.push({
             name: colName,
             dataType: dataType,
@@ -119,12 +134,13 @@ export class MysqlAstParser implements ISqlAstParser {
             comment: comment,
             autoIncrement: !!def.auto_increment,
             unsigned: isUnsigned,
+            collate: collateVal,
             rawDefinition: definition,
             definition: definition
           } as any);
-        } else if (def.resource === 'constraint') {
+        } else if (def.resource === 'constraint' || def.resource === 'index') {
            if (def.constraint_type === 'FOREIGN KEY') {
-              let onDelete, onUpdate;
+              let onDelete: string | undefined, onUpdate: string | undefined;
               if (def.reference_definition.on_action) {
                  def.reference_definition.on_action.forEach((action: any) => {
                     if (action.type === 'on delete') onDelete = action.value?.value;
@@ -137,7 +153,9 @@ export class MysqlAstParser implements ISqlAstParser {
               const refCols = def.reference_definition.definition.map((c: any) => c.column);
               const name = def.constraint || `fk_${Math.random().toString(36).substring(7)}`;
 
-              const definition = `CONSTRAINT \`${name}\` FOREIGN KEY (\`${cols.join('`, `')}\`) REFERENCES \`${refTable}\` (\`${refCols.join('`, `')}\`)`;
+              let definition = `CONSTRAINT \`${name}\` FOREIGN KEY (\`${cols.join('`, `')}\`) REFERENCES \`${refTable}\` (\`${refCols.join('`, `')}\`)`;
+              if (onDelete) definition += ` ON DELETE ${onDelete.toUpperCase()}`;
+              if (onUpdate) definition += ` ON UPDATE ${onUpdate.toUpperCase()}`;
 
               foreignKeys.push({
                  name,
@@ -150,9 +168,9 @@ export class MysqlAstParser implements ISqlAstParser {
                  definition: definition
               } as any);
            } else {
-              const type = (def.constraint_type || '').toLowerCase();
+              const type = (def.constraint_type || def.keyword || '').toLowerCase();
               const isPk = type === 'primary key';
-              const isUnique = type === 'unique' || type === 'unique key';
+              const isUnique = type === 'unique' || type === 'unique key' || type === 'unique index';
               const cols = def.definition.map((c: any) => c.column);
               const name = def.index || def.constraint || (isPk ? 'PRIMARY' : `idx_${Math.random().toString(36).substring(7)}`);
 
@@ -197,16 +215,14 @@ export class MysqlAstParser implements ISqlAstParser {
 
   cleanDefiner(ddl: string): string {
     if (!ddl) return '';
-    const userPart = `(?:'[^']+'|\`[^\`]+\`|"[^"]+"|[a-zA-Z0-9_]+)`;
-    const hostPart = `(?:@(?:'[^']+'|\`[^\`]+\`|"[^"]+"|[a-zA-Z0-9_\\.\%]+))?`;
-    const definerPattern = `DEFINER\\s*=\\s*${userPart}${hostPart}`;
+    const definerPattern = `DEFINER\\s*=\\s*(?:'[^']*'|"[^"]*"|\`[^\`]*\`|[^\\s@]+)+(?:@(?:'[^']*'|"[^"]*"|\`[^\`]*\`|[^\\s@\\(\\);]+)+)?`;
     
     const beginMatch = ddl.match(/(\s)BEGIN(\s|$)/i);
     if (beginMatch && beginMatch.index !== undefined) {
       let header = ddl.substring(0, beginMatch.index).trim();
       const body = ddl.substring(beginMatch.index).trim();
       const re = new RegExp(definerPattern, 'gi');
-      header = header.replace(re, '').replace(/\s{2,}/g, ' ');
+      header = header.replace(re, '').replace(/[ \t]{2,}/g, ' ');
       return header + ' ' + body;
     }
     

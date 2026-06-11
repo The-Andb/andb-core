@@ -78,6 +78,8 @@ export interface IDatabaseDriver {
     host?: string;
     permissions: any;
   }): Promise<string>;
+  getThreadId?(): number | undefined;
+  destroy?(): Promise<void>;
 }
 
 export interface IIntrospectionService {
@@ -109,7 +111,7 @@ export interface IMonitoringService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getProcessList(): Promise<any[]>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getStatus(): Promise<any>;
+  getStatus(variables?: string[]): Promise<any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getVariables(): Promise<any>;
   getVersion(): Promise<string>;
@@ -117,6 +119,8 @@ export interface IMonitoringService {
   getConnections(): Promise<any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getTransactions(): Promise<any>;
+  getPulse?(): Promise<{ threadsRunning: number; lockWaits: number }>;
+  killThread?(threadId: number): Promise<void>;
 }
 
 export interface IMigrator {

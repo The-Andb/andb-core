@@ -43,7 +43,20 @@ export class GitOrchestrator {
     const currentProject = this.configService?.getCurrentProject();
     const projectName = currentProject?.name ? currentProject.name.replace(/[^a-z0-9_-]/gi, '_').toLowerCase() : 'default';
 
-    const storagePath = config.storagePath || payload.__projectBaseDir || path.join(process.cwd(), 'projects', projectName);
+    let storagePath = config.storagePath || payload.__projectBaseDir || path.join(process.cwd(), 'projects', projectName);
+
+    if (storagePath) {
+      const normPath = path.normalize(storagePath).replace(/\\/g, '/');
+      const targetName = path.basename(normPath);
+      const legacyPattern = /^[a-z0-9_-]+-[a-f0-9]{8,36}$/i;
+      if (legacyPattern.test(targetName)) {
+        const parentDir = path.dirname(normPath);
+        const lastHyphen = targetName.lastIndexOf('-');
+        const slug = targetName.substring(0, lastHyphen);
+        const canonicalName = slug.replace(/[^a-z0-9_-]/gi, '_').toLowerCase().replace(/-+/g, '_');
+        storagePath = path.join(parentDir, 'projects', canonicalName);
+      }
+    }
 
     return {
       ...config,
@@ -110,7 +123,7 @@ export class GitOrchestrator {
   }
 
   private async _gitSyncInternal(payload: any) {
-    const { env, db, message, author, typeFilter } = payload;
+    const { env, db, message, author, typeFilter, specificName } = payload;
     const config = this.prepareConfig(payload);
 
     const gitService = await this.getGitService();
@@ -119,7 +132,7 @@ export class GitOrchestrator {
     const connection = this.configService?.getConnection(env);
     const dbType = connection?.type || 'mysql';
 
-    await this.mirrorService.mirrorToFilesystem(env, db, config.storagePath, dbType, typeFilter);
+    await this.mirrorService.mirrorToFilesystem(env, db, config.storagePath, dbType, typeFilter, specificName);
 
     const status = await gitService.getStatus();
     const hasChanges = status.modifiedFiles.length > 0 || status.untrackedFiles.length > 0;

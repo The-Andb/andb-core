@@ -89,6 +89,10 @@ export class OrchestrationService {
         return await this.schemaOrchestrator.getFKGraph(payload);
       case 'executeQuery':
         return await this.schemaOrchestrator.executeQuery(payload);
+      case 'closeQuerySession':
+        return await this.schemaOrchestrator.closeQuerySession(payload);
+      case 'cancelQuery':
+        return await this.schemaOrchestrator.cancelQuery(payload);
 
       // AI DBA Operations
       case 'ai-configure':
@@ -97,6 +101,14 @@ export class OrchestrationService {
         return await this.aiOrchestrator?.ask(payload);
       case 'ai-review':
         return await this.aiOrchestrator?.review(payload);
+
+      // Realtime Database Monitor Operations
+      case 'monitor-pulse':
+        return await this.schemaOrchestrator.monitorPulse(payload);
+      case 'monitor-snapshot':
+        return await this.schemaOrchestrator.monitorSnapshot(payload);
+      case 'monitor-kill':
+        return await this.schemaOrchestrator.monitorKill(payload);
 
       default:
         throw new Error(`Unknown operation: ${operation}`);
