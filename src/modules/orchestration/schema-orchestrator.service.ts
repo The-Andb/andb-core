@@ -407,7 +407,7 @@ export class SchemaOrchestrator {
       }
 
       return {
-        success: true,
+        success: failed.length === 0,
         successful,
         failed,
         dryRun: false,

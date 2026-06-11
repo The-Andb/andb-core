@@ -107,16 +107,14 @@ export class MysqlIntrospectionService implements IIntrospectionService {
 
       for (let i = 0; i < lines.length; i++) {
         const _line = lines[i];
+        const trimmed = _line.trim().toUpperCase();
         if (
-          _line.trim().startsWith('KEY `') ||
-          _line.trim().startsWith('UNIQUE KEY `') ||
-          _line.trim().startsWith('FULLTEXT KEY `') ||
-          _line.trim().startsWith('SPATIAL KEY `') ||
-          _line.trim().startsWith('INDEX `')
+          trimmed.startsWith('KEY ') ||
+          trimmed.startsWith('UNIQUE KEY ') ||
+          trimmed.startsWith('FULLTEXT KEY ') ||
+          trimmed.startsWith('SPATIAL KEY ') ||
+          trimmed.startsWith('INDEX ')
         ) {
-          // If the previous line ended with a comma, we might need to be careful, but MySQL SHOW CREATE TABLE 
-          // usually formats one constraint per line ending with comma except the last.
-          // To sort safely, we strip trailing comma, sort, and add them back.
           indexLines.push(_line);
         } else {
           standardLines.push(_line);
@@ -124,15 +122,10 @@ export class MysqlIntrospectionService implements IIntrospectionService {
       }
 
       if (indexLines.length > 0) {
-        // Find where index lines were (usually before CONSTRAINT or `) ENGINE=`)
-        // To be safe, we collect all index lines, and replace the block where the first index started.
-        // Identify the exact insertion point (right after the last column or primary key before the first index line was found).
-        // Since we extracted them, `standardLines` has the table without those specific indexes.
-
-        // Strip trailing commas from all index lines, sort them.
+        // Sort index lines alphabetically
         indexLines.sort((a, b) => {
-          const aName = a.trim().match(/KEY\s+`([^`]+)`/)?.[1] || a;
-          const bName = b.trim().match(/KEY\s+`([^`]+)`/)?.[1] || b;
+          const aName = a.trim().match(/(?:KEY|INDEX)\s+`([^`]+)`/i)?.[1] || a.trim();
+          const bName = b.trim().match(/(?:KEY|INDEX)\s+`([^`]+)`/i)?.[1] || b.trim();
           return aName.localeCompare(bName);
         });
 
@@ -148,24 +141,42 @@ export class MysqlIntrospectionService implements IIntrospectionService {
           insertAt = standardLines.length - 1;
         }
 
-        // Ensure trailing comma logic is sound. We will apply commas to all lines before the last line inside the definition.
         standardLines.splice(insertAt, 0, ...indexLines);
 
         // Re-evaluate trailing commas inside the CREATE TABLE parenthesis.
         let insideParen = false;
+        let parenStartIdx = -1;
+        let parenEndIdx = -1;
+
         for (let i = 0; i < standardLines.length; i++) {
-          if (standardLines[i].includes('CREATE TABLE')) {
+          const line = standardLines[i];
+          if (line.includes('CREATE TABLE')) {
             insideParen = true;
-          } else if (insideParen && standardLines[i].trim().startsWith(')')) {
+            parenStartIdx = i;
+          } else if (insideParen && line.trim().startsWith(')')) {
             insideParen = false;
-            // Remove comma from the line right before the closing paren if it exists
-            if (i > 0 && standardLines[i - 1].trim().endsWith(',')) {
-              standardLines[i - 1] = standardLines[i - 1].replace(/,$/, '');
+            parenEndIdx = i;
+            break;
+          }
+        }
+
+        if (parenStartIdx !== -1 && parenEndIdx !== -1) {
+          // Find all non-empty definition lines inside the parentheses
+          const definitionLineIndices: number[] = [];
+          for (let i = parenStartIdx + 1; i < parenEndIdx; i++) {
+            if (standardLines[i].trim().length > 0) {
+              definitionLineIndices.push(i);
             }
-          } else if (insideParen && standardLines[i].trim().length > 0 && standardLines[i + 1] && !standardLines[i + 1].trim().startsWith(')')) {
-            // ensure it has a comma if it's not the last item
-            if (!standardLines[i].trim().endsWith(',')) {
-              standardLines[i] = standardLines[i] + ',';
+          }
+
+          // Format each definition line: strip existing commas/spaces, then re-add if not last
+          for (let k = 0; k < definitionLineIndices.length; k++) {
+            const idx = definitionLineIndices[k];
+            const cleaned = standardLines[idx].replace(/,[\s\r]*$/, '').replace(/[\s\r]*$/, '');
+            if (k < definitionLineIndices.length - 1) {
+              standardLines[idx] = cleaned + ',';
+            } else {
+              standardLines[idx] = cleaned;
             }
           }
         }

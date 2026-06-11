@@ -526,13 +526,13 @@ export class ParserService {
     }
 
     // Fallback to legacy regex implementation
-    return this.parseTableDetailedRegex(tableSQL);
+    return this.parseTableDetailedRegex(tableSQL, dialect);
   }
 
   /**
    * Legacy Regex-based Parser (Kept for testing & fallback)
    */
-  parseTableDetailedRegex(tableSQL: string): {
+  parseTableDetailedRegex(tableSQL: string, dialect: string = 'mysql'): {
     tableName: string;
     columns: any[];
     indexes: any[];
@@ -548,10 +548,38 @@ export class ParserService {
       if (!tableNameMatch) return null;
       const tableName = tableNameMatch[1];
 
-      // Find the first '(' and the last ')' to extract the body
+      // Find the first '(' and its matching closing ')' to extract the body
       const firstParen = tableSQL.indexOf('(');
-      const lastParen = tableSQL.lastIndexOf(')');
-      if (firstParen === -1 || lastParen === -1) return null;
+      if (firstParen === -1) return null;
+
+      let lastParen = -1;
+      let depth = 0;
+      let scanInQuote = false;
+      let scanQuoteChar = '';
+
+      for (let i = firstParen; i < tableSQL.length; i++) {
+        const char = tableSQL[i];
+        if (scanInQuote) {
+          if (char === scanQuoteChar && tableSQL[i - 1] !== '\\') {
+            scanInQuote = false;
+          }
+        } else {
+          if (char === "'" || char === '"' || char === '`') {
+            scanInQuote = true;
+            scanQuoteChar = char;
+          } else if (char === '(') {
+            depth++;
+          } else if (char === ')') {
+            depth--;
+            if (depth === 0) {
+              lastParen = i;
+              break;
+            }
+          }
+        }
+      }
+
+      if (lastParen === -1) return null;
       const body = tableSQL.substring(firstParen + 1, lastParen);
 
       const lines: string[] = [];
@@ -634,7 +662,7 @@ export class ParserService {
           
           // Reconstruct valid standalone definition for SQLite/etc
           let definition = line;
-          if (!up.includes('CREATE') && !up.includes('INDEX')) {
+          if ((dialect === 'sqlite' || dialect === 'sqlite3') && !up.includes('CREATE') && !up.includes('INDEX')) {
              definition = `CREATE ${isUnique ? 'UNIQUE ' : ''}INDEX "${name}" ON "${tableName}" (${columns})`;
           }
 
