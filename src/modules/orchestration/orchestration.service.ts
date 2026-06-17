@@ -6,6 +6,7 @@ import { GitOrchestrator } from './git-orchestrator.service';
 import { SchemaOrchestrator } from './schema-orchestrator.service';
 import { ParserService } from '../parser/parser.service';
 import { AIOrchestrator } from './ai-orchestrator.service';
+import { DatabaseDiscoveryService } from '../discovery/discovery.service';
 
 export class OrchestrationService {
   private readonly logger = getLogger({ logName: 'OrchestrationService' });
@@ -18,6 +19,7 @@ export class OrchestrationService {
     public readonly schemaOrchestrator: SchemaOrchestrator,
     public readonly parser: ParserService,
     public readonly aiOrchestrator?: AIOrchestrator,
+    public readonly databaseDiscovery?: DatabaseDiscoveryService,
   ) { }
 
   public migrationReport: any = null;
@@ -66,6 +68,8 @@ export class OrchestrationService {
         return await this.securityOrchestrator.probeRestrictedUser(payload);
       case 'test-connection':
         return await this.securityOrchestrator.testConnection(payload);
+      case 'detect-databases':
+        return await this.securityOrchestrator.detectDatabases(payload);
       case 'git-status':
         return await this.gitOrchestrator.gitStatus(payload);
       case 'git-init':
@@ -109,6 +113,10 @@ export class OrchestrationService {
         return await this.schemaOrchestrator.monitorSnapshot(payload);
       case 'monitor-kill':
         return await this.schemaOrchestrator.monitorKill(payload);
+
+      // Discovery operations
+      case 'discovery-scan':
+        return await this.databaseDiscovery?.scanAll(payload.workspacePath);
 
       default:
         throw new Error(`Unknown operation: ${operation}`);

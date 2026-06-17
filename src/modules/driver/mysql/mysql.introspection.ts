@@ -12,6 +12,13 @@ export class MysqlIntrospectionService implements IIntrospectionService {
     private readonly parser: ParserService,
   ) { }
 
+  async listDatabases(): Promise<string[]> {
+    const results = await this.driver.query<RowDataPacket[]>('SHOW DATABASES');
+    return results
+      .map((row: any) => row.Database || row.database || Object.values(row)[0])
+      .filter((db: string) => !['information_schema', 'mysql', 'performance_schema', 'sys'].includes(db));
+  }
+
   async listTables(dbName: string): Promise<string[]> {
     const results = await this.driver.query<RowDataPacket[]>(
       "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME",

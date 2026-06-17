@@ -83,6 +83,7 @@ export interface IDatabaseDriver {
 }
 
 export interface IIntrospectionService {
+  listDatabases?(): Promise<string[]>;
   listTables(dbName: string): Promise<string[]>;
   listViews(dbName: string): Promise<string[]>;
   listProcedures(dbName: string): Promise<string[]>;

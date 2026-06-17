@@ -782,7 +782,7 @@ export class SchemaOrchestrator {
       if (monitoring && typeof monitoring.getPulse === 'function') {
         return await monitoring.getPulse();
       }
-      return { threadsRunning: 0, lockWaits: 0 };
+      return { threadsRunning: 0, lockWaits: 0, queriesPerSec: 0, activeConnections: 0, maxConnections: 151, uptimeSeconds: 0 };
     } finally {
       await driver.disconnect();
     }
@@ -794,9 +794,20 @@ export class SchemaOrchestrator {
     try {
       await driver.connect();
       const monitoring = (driver as any).getMonitoringService();
-      
+
+      // Use merged getFullSnapshot if available (single connection, pulse + processlist + lockTree)
+      if (monitoring && typeof monitoring.getFullSnapshot === 'function') {
+        const snapshot = await monitoring.getFullSnapshot();
+        return {
+          pulse: snapshot.pulse,
+          lockTree: snapshot.lockTree || [],
+          processList: snapshot.processList || [],
+        };
+      }
+
+      // Fallback: separate calls (legacy drivers)
       const processList = await monitoring.getProcessList();
-      
+
       let lockTree: any[] = [];
       try {
         const trx = await monitoring.getTransactions();
@@ -830,6 +841,7 @@ export class SchemaOrchestrator {
       await driver.disconnect();
     }
   }
+
 
   async monitorKill(payload: any) {
     const { connection, threadId } = payload;

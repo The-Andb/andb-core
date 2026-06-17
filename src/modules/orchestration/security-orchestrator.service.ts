@@ -140,8 +140,9 @@ export class SecurityOrchestrator {
 
   async testConnection(payload: any) {
     const connection = payload.connection || payload;
-    const driver = await this.getDriverFromConnection(connection);
+    let driver: any;
     try {
+      driver = await this.getDriverFromConnection(connection);
       await driver.connect();
       const { type: connType } = ConnectionUtil.resolve(connection);
       if (connType !== 'dump') {
@@ -151,7 +152,35 @@ export class SecurityOrchestrator {
     } catch (e: any) {
       return { success: false, message: e.message };
     } finally {
-      await driver.disconnect();
+      if (driver) {
+        await driver.disconnect();
+      }
+    }
+  }
+
+  async detectDatabases(payload: any) {
+    const connection = payload.connection || payload;
+    let driver: any;
+    try {
+      driver = await this.getDriverFromConnection(connection);
+      await driver.connect();
+      const intro = driver.getIntrospectionService();
+      let list: string[] = [];
+      if (intro && typeof intro.listDatabases === 'function') {
+        list = await intro.listDatabases();
+      } else {
+        const { type } = ConnectionUtil.resolve(connection);
+        if (type === 'sqlite') {
+          list = ['main'];
+        }
+      }
+      return { success: true, databases: list };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    } finally {
+      if (driver) {
+        await driver.disconnect();
+      }
     }
   }
 

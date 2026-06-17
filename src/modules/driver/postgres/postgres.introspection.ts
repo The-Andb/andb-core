@@ -13,6 +13,21 @@ export class PostgresIntrospectionService implements IIntrospectionService {
     this.targetSchema = schema;
   }
 
+  async listDatabases(): Promise<string[]> {
+    const dbRows = await this.driver.query("SELECT datname FROM pg_database WHERE datistemplate = false AND datallowconn = true ORDER BY datname");
+    const databases = dbRows.map((r: any) => r.datname || Object.values(r)[0]);
+    
+    const schemaRows = await this.driver.query(`
+      SELECT nspname as schema_name
+      FROM pg_namespace
+      WHERE nspname NOT LIKE 'pg_%' AND nspname != 'information_schema'
+      ORDER BY nspname
+    `);
+    const schemas = schemaRows.map((r: any) => r.schema_name);
+    
+    return [...new Set([...databases, ...schemas])];
+  }
+
   async listSchemas(): Promise<string[]> {
     const rows = await this.driver.query(`
       SELECT nspname as schema_name

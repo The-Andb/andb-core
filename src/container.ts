@@ -36,6 +36,7 @@ import { AIService } from './modules/orchestration/ai.service';
 import { AIOrchestrator } from './modules/orchestration/ai-orchestrator.service';
 import { KnowledgeService } from './modules/knowledge/knowledge.service';
 import { IPromptProvider } from './common/interfaces/prompt.interface';
+import { DatabaseDiscoveryService } from './modules/discovery/discovery.service';
 
 /**
  * Structured report from the dogfooding migration.
@@ -81,6 +82,7 @@ export class Container {
   public readonly aiOrchestrator: AIOrchestrator;
   public readonly knowledge?: KnowledgeService;
   public readonly promptProvider?: IPromptProvider;
+  public readonly databaseDiscovery: DatabaseDiscoveryService;
 
   // Sub-orchestrators
   public readonly gitOrchestrator: GitOrchestrator;
@@ -135,6 +137,7 @@ export class Container {
     (this.aiOrchestrator as any).schemaOrchestrator = this.schemaOrchestrator;
 
     // 5. Root orchestrator
+    this.databaseDiscovery = new DatabaseDiscoveryService();
     this.orchestrator = new OrchestrationService(
       this.config,
       featureConfig,
@@ -143,6 +146,7 @@ export class Container {
       this.schemaOrchestrator,
       this.parser,
       this.aiOrchestrator,
+      this.databaseDiscovery,
     );
   }
 
