@@ -1,7 +1,6 @@
 # TheAndb Core Engine 🚀
 
-**The Professional AI-Driven Database Infrastructure Engine.**
-AST-powered Safety, Deep Semantic Analysis, and Professional Orchestration.
+> Compare and sync your database schemas across environments — safely, visually, and fast.
 
 ---
 
@@ -25,13 +24,20 @@ This engine doesn't just "compare text"; it **understands intent** through AST (
 - 🛡️ **Session Hygiene**: Automatic handling of foreign key checks and safe session modes for zero-downtime migrations.
 - 🔌 **Pluggable Drivers**: High-performance MySQL and Dump (offline storage) drivers.
 
+## 📋 Prerequisites
+
+- Node.js >= 18
+- macOS (Windows support coming soon)
+- MySQL 5.7+ or 8.0+
+
 ## 🚀 Quick Start
 
 ### Installation
 
 ```bash
-# Clone the monorepo and navigate to core
-cd core
+# Clone the repository
+git clone https://github.com/The-Andb/andb-core.git
+cd andb-core
 npm install
 ```
 
@@ -83,14 +89,9 @@ We are currently in **Phase 4.5** of our master plan. Our goal is 100% parity wi
 - [x] Schema Comparison (Tables, Views, Routines, Triggers)
 - [x] CLI Parity (`generate`, `helper`)
 
-## 📄 License & Commercial
+## 📄 License
 
-**TheAndb Public License (APL-1.0)**
-
-- ✅ **Source-Available**: View, Clone, Run locally for evaluation.
-- ❌ **No Commercial Use**: Production, SaaS, Redistribution are prohibited without a license.
-
-See [LICENSE](../LICENSE) for full terms.
+**TheAndb Desktop** and **TheAndb Core** are free to download and use for internal business operations including production use. A commercial license is required only if you redistribute, white-label, or resell the software as a competing product.
 
 ---
 
