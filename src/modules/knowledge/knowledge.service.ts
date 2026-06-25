@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+const { getLogger } = require('andb-logger');
 
 export interface KnowledgeChunk {
   file: string;
@@ -8,6 +9,7 @@ export interface KnowledgeChunk {
 }
 
 export class KnowledgeService {
+  private readonly logger = getLogger({ logName: 'KnowledgeService' });
   private docsPaths: string[] = [];
   private chunks: KnowledgeChunk[] = [];
   private isLoaded = false;
@@ -33,7 +35,7 @@ export class KnowledgeService {
     try {
       for (const docsPath of this.docsPaths) {
         if (!fs.existsSync(docsPath)) {
-          console.warn(`[KnowledgeService] Docs path not found: ${docsPath}`);
+          this.logger.warn(`Docs path not found: ${docsPath}`);
           continue;
         }
 
@@ -43,13 +45,13 @@ export class KnowledgeService {
           const content = fs.readFileSync(path.join(docsPath, file), 'utf8');
           this.parseFile(file, content);
         }
-        console.log(`[KnowledgeService] Loaded chunks from ${docsPath}`);
+        this.logger.info(`Loaded chunks from ${docsPath}`);
       }
 
       this.isLoaded = true;
-      console.log(`[KnowledgeService] Total loaded ${this.chunks.length} chunks.`);
+      this.logger.info(`Total loaded ${this.chunks.length} chunks.`);
     } catch (error: any) {
-      console.error(`[KnowledgeService] Failed to load knowledge base: ${error.message}`);
+      this.logger.error(`Failed to load knowledge base: ${error.message}`);
     }
   }
 

@@ -196,7 +196,7 @@ export class MysqlDriver implements IDatabaseDriver {
     }
 
     sql += `FLUSH PRIVILEGES;`;
-    console.log('[MysqlDriver] Generated Script:\n', sql);
+    this.logger.info(`[MysqlDriver] Generated Script:\n${sql}`);
     return sql;
   }
 

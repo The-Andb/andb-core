@@ -69,7 +69,7 @@ export class SchemaOrchestrator {
   }
 
   async compareSchema(payload: any) {
-    const { srcEnv, destEnv, type = 'tables', name: specificName } = payload;
+    const { srcEnv, destEnv, type = 'tables', name: specificName, strictColumnOrder } = payload;
 
     const srcConn = this.configService.getConnection(srcEnv);
     const destConn = this.configService.getConnection(destEnv);
@@ -77,7 +77,7 @@ export class SchemaOrchestrator {
     const destDbName = destConn?.config?.database || 'default';
 
     const diff = await this.comparator.compareFromStorage(
-      srcEnv, destEnv, srcDbName, destDbName, type, specificName,
+      srcEnv, destEnv, srcDbName, destDbName, type, specificName, undefined, undefined, strictColumnOrder
     );
 
     // Phase 2: Enrich with Semantic Diffs for Tables
@@ -707,10 +707,26 @@ export class SchemaOrchestrator {
     }
 
     try {
-      const rows = await driver.query(sql, params);
+      let rows: any;
+      let fields: string[] | undefined;
+
+      if ((driver as any).connection?.query) {
+        // mysql2
+        const [r, f] = await (driver as any).connection.query(sql, params);
+        rows = r;
+        fields = f ? f.map((x: any) => x.name) : undefined;
+      } else if ((driver as any).client?.query) {
+        // pg
+        const result = await (driver as any).client.query(sql, params);
+        rows = result.rows;
+        fields = result.fields ? result.fields.map((x: any) => x.name) : undefined;
+      } else {
+        rows = await driver.query(sql, params);
+      }
+
       return {
         success: true,
-        data: rows,
+        data: { rows, fields },
       };
     } catch (err: any) {
       this.logger.error(`Query execution failed: ${err.message}`);

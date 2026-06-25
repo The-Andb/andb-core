@@ -22,21 +22,20 @@ export class ExporterService {
     typeFilter?: string,
     onProgress?: (progress: { env: string; type: string; current: number; total: number; objectName: string; state?: string }) => void
   ) {
-    console.log(`📦 [Exporter] exportSchema called: env=${envName}, name=${specificName || 'ALL'}, typeFilter=${typeFilter || 'ALL'}`);
+    this.logger.info(`📦 [Exporter] exportSchema called: env=${envName}, name=${specificName || 'ALL'}, typeFilter=${typeFilter || 'ALL'}`);
 
     const connection = this.configService.getConnection(envName);
     if (!connection) {
-      console.log(`❌ [Exporter] Connection NOT found for env: ${envName}`);
+      this.logger.error(`❌ [Exporter] Connection NOT found for env: ${envName}`);
       throw new Error(`Connection not found for env: ${envName}`);
     }
-    console.log(`✅ [Exporter] Connection found: type=${connection.type}, host=${connection.config?.host}, db=${connection.config?.database}`);
-    console.log(`[Exporter] Full connection config: ${JSON.stringify(connection.config)}`);
+    this.logger.info(`✅ [Exporter] Connection found: type=${connection.type}, host=${connection.config?.host}, db=${connection.config?.database}`);
 
     const driver = await this.driverFactory.create(connection.type, connection.config);
     try {
-      console.log(`🔌 [Exporter] Connecting to ${connection.type}...`);
+      this.logger.info(`🔌 [Exporter] Connecting to ${connection.type}...`);
       await driver.connect();
-      console.log(`✅ [Exporter] Connected successfully`);
+      this.logger.info(`✅ [Exporter] Connected successfully`);
       const introspection = driver.getIntrospectionService();
       const dbName = connection.config.database || 'default';
 
@@ -63,14 +62,14 @@ export class ExporterService {
       const types = normalizedFilter
         ? allTypes.filter(t => t === normalizedFilter)
         : allTypes;
-      console.log(`📋 [Exporter] Filter: "${typeFilter}" → normalized: "${normalizedFilter || 'ALL'}" → types: [${types.join(', ')}]`);
+      this.logger.info(`📋 [Exporter] Filter: "${typeFilter}" → normalized: "${normalizedFilter || 'ALL'}" → types: [${types.join(', ')}]`);
       const summary: Record<string, number> = {};
 
       for (const type of types) {
         const pluralType = `${type}S` as const;
 
         const list = await this._listObjects(introspection, dbName, type, specificName);
-        console.log(`📊 [Exporter] ${pluralType}: found ${list.length} objects`);
+        this.logger.info(`📊 [Exporter] ${pluralType}: found ${list.length} objects`);
         summary[pluralType] = list.length;
 
         if (list.length > 0 && onProgress) {

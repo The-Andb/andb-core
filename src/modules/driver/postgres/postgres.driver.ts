@@ -35,7 +35,7 @@ export class PostgresDriver implements IDatabaseDriver {
         host: this.config.host,
         port: this.config.port || 5432,
         user: this.config.user,
-        password: this.config.password,
+        password: this.config.password || '',
         database: this.config.database,
         stream: stream
       });

@@ -8,6 +8,9 @@ export class ParserService {
   private postgresParser = new PostgresAstParser();
   private sqliteParser = new SqliteAstParser();
 
+  private parseCache = new Map<string, any>();
+  private readonly MAX_CACHE_SIZE = 5000;
+
   getParser(dialect: string = 'mysql'): ISqlAstParser {
     if (dialect?.toLowerCase() === 'postgres' || dialect?.toLowerCase() === 'postgresql') {
       return this.postgresParser;
@@ -480,6 +483,13 @@ export class ParserService {
     options: any;
     partitions: string | null;
   } | null {
+    if (!tableSQL) return null;
+    const cacheKey = `${dialect}:${tableSQL}`;
+    if (this.parseCache.has(cacheKey)) {
+      return JSON.parse(JSON.stringify(this.parseCache.get(cacheKey)));
+    }
+
+    let result = null;
     try {
        // Attempt AST parsing first
        const parser = this.getParser(dialect);
@@ -488,7 +498,18 @@ export class ParserService {
           const pkSet = new Set(ast.indexes.filter((i: any) => i.type === 'PRIMARY').flatMap((i: any) => i.columns));
           const uniqueSet = new Set(ast.indexes.filter((i: any) => i.type === 'UNIQUE').flatMap((i: any) => i.columns));
 
+          // Rescue inline PRIMARY KEY and UNIQUE that ast parser might drop
+          const inlinePkMatches = [...tableSQL.matchAll(/(?:^|[,(])\s*[`"']?(\w+)[`"']?\s+[^,()]*\bPRIMARY\s+KEY\b/gim)];
+          for (const m of inlinePkMatches) pkSet.add(m[1]);
+          
+          const inlineUniqueMatches = [...tableSQL.matchAll(/(?:^|[,(])\s*[`"']?(\w+)[`"']?\s+[^,()]*\bUNIQUE\b/gim)];
+          for (const m of inlineUniqueMatches) {
+             uniqueSet.add(m[1]);
+          }
+          console.log('pkSet before mapping:', Array.from(pkSet), 'for tableSQL snippet:', tableSQL.substring(0, 50));
+
           const mappedColumns = ast.columns.map((c: any) => {
+             if (c.name === 'id') console.log('RAW ID COLUMN:', JSON.stringify(c));
              let fullType = c.dataType.toUpperCase();
              if (c.length != null) {
                 fullType += `(${c.length}`;
@@ -500,9 +521,9 @@ export class ParserService {
              return {
                 name: c.name,
                 type: fullType,
-                pk: pkSet.has(c.name),
-                notNull: !c.nullable,
-                unique: uniqueSet.has(c.name),
+                pk: pkSet.has(c.name) || !!c.primaryKey || !!c.pk,
+                notNull: !c.nullable || !!c.primaryKey || !!c.pk,
+                unique: uniqueSet.has(c.name) || !!c.unique,
                 unsigned: !!c.unsigned,
                 autoIncrement: c.autoIncrement,
                 default: c.defaultValue,
@@ -512,7 +533,7 @@ export class ParserService {
              };
           });
 
-          return {
+          result = {
              tableName: ast.tableName,
              columns: mappedColumns,
              indexes: ast.indexes,
@@ -521,12 +542,23 @@ export class ParserService {
              partitions: ast.partitions
           };
        }
-    } catch (e) {
-       // console.debug('AST Parser failed, falling back to Regex. Error:', (e as Error).message);
+    } catch (e: any) {
+       console.log('AST Parser failed, falling back to Regex. Error:', e.message);
     }
 
-    // Fallback to legacy regex implementation
-    return this.parseTableDetailedRegex(tableSQL, dialect);
+    if (!result) {
+      // Fallback to legacy regex implementation
+      result = this.parseTableDetailedRegex(tableSQL, dialect);
+    }
+
+    if (result) {
+      if (this.parseCache.size >= this.MAX_CACHE_SIZE) {
+        this.parseCache.clear();
+      }
+      this.parseCache.set(cacheKey, JSON.parse(JSON.stringify(result)));
+    }
+
+    return result;
   }
 
   /**

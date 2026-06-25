@@ -2,8 +2,11 @@ import { AIService } from './ai.service';
 import { ProjectConfigService } from '../config/project-config.service';
 import { allAITools } from './tools';
 import { IPromptProvider } from '../../common/interfaces/prompt.interface';
+const { getLogger } = require('andb-logger');
 
 export class AIOrchestrator {
+  private readonly logger = getLogger({ logName: 'AIOrchestrator' });
+
   constructor(
     private readonly aiService: AIService,
     private readonly configService: ProjectConfigService,
@@ -44,11 +47,11 @@ export class AIOrchestrator {
       const vertexRegion = settings?.ai_vertex_region || 'us-central1';
 
       if (apiKey || provider) {
-        console.log(`[AIOrchestrator] Rehydrating AI Service (Provider: ${provider}, Model: ${modelVersion})`);
+        this.logger.info(`Rehydrating AI Service (Provider: ${provider}, Model: ${modelVersion})`);
         this.aiService.configure(apiKey, provider, modelVersion, vertexProjectId, vertexRegion);
       }
     } catch (e: any) {
-      console.warn(`[AIOrchestrator] Rehydration failed: ${e.message}`);
+      this.logger.warn(`Rehydration failed: ${e.message}`);
     }
   }
 
@@ -94,7 +97,7 @@ export class AIOrchestrator {
 
     const tools = this.getToolsWithContext();
     
-    console.log(`[AIOrchestrator] Calling AI Service with ${tools.length} tools. Question: ${question}`);
+    this.logger.info(`Calling AI Service with ${tools.length} tools. Question: ${question}`);
     
     const content = await this.aiService.ask(question, context, tools, systemPrompt);
     return { content };

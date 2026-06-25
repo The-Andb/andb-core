@@ -25,7 +25,23 @@ export class ComparatorService {
   /**
    * Compare two CREATE TABLE statements and return differences
    */
-  compareTables(srcDDL: string, destDDL: string, srcDialect: string = 'mysql', destDialect: string = 'mysql'): ITableDiff {
+  compareTables(
+    srcDDL: string,
+    destDDL: string,
+    srcDialect: string = 'mysql',
+    destDialect: string = 'mysql',
+    strictColumnOrder: boolean = false,
+  ): ITableDiff {
+    // FAST PATH: Strict string match avoids all parsing overhead
+    if (srcDDL === destDDL && srcDialect === destDialect) {
+      const match = srcDDL.match(/CREATE TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[`"\[])?([^`"\]\s(]+)/i);
+      return {
+        tableName: match ? match[1] : 'unknown',
+        operations: [],
+        hasChanges: false,
+      };
+    }
+
     const srcTable = this.parser.parseTableDetailed(srcDDL, srcDialect);
     const destTable = this.parser.parseTableDetailed(destDDL, destDialect);
 
@@ -44,7 +60,7 @@ export class ComparatorService {
     const operations: IDiffOperation[] = [];
 
     // 1. Compare Columns
-    const { alterColumns, missingColumns } = this.compareColumns(srcTable, destTable, srcDialect, destDialect);
+    const { alterColumns, missingColumns } = this.compareColumns(srcTable, destTable, srcDialect, destDialect, strictColumnOrder);
 
     // Convert logic results to IDiffOperations
     alterColumns.forEach((op) => {
@@ -173,7 +189,13 @@ export class ComparatorService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private compareColumns(srcTable: any, destTable: any, srcDialect: string = 'mysql', destDialect: string = 'mysql') {
+  private compareColumns(
+    srcTable: any,
+    destTable: any,
+    srcDialect: string = 'mysql',
+    destDialect: string = 'mysql',
+    strictColumnOrder: boolean = false,
+  ) {
     const alterColumns: { type: 'ADD' | 'MODIFY'; name: string; def: string }[] = [];
     const missingColumns: string[] = [];
     // Track the last column that exists in BOTH src and dest, so AFTER `col`
@@ -243,9 +265,10 @@ export class ComparatorService {
             }
           }
 
-          if (hasChange) {
-            let def = srcCol.rawDefinition || srcCol.definition;
-            if (positionChanged && !def.toUpperCase().includes('FIRST') && !def.toUpperCase().includes('AFTER')) {
+          const hasPositionChange = strictColumnOrder && positionChanged;
+          if (hasChange || hasPositionChange) {
+            let def = srcCol.rawDefinition || srcCol.definition || '';
+            if (hasPositionChange && !def.toUpperCase().includes('FIRST') && !def.toUpperCase().includes('AFTER')) {
               def = `${def} ${positionDef}`.trim();
             }
             alterColumns.push({ type: 'MODIFY', name: columnName, def });
@@ -474,27 +497,33 @@ export class ComparatorService {
     const destTables = await dest.listTables(targetDbName);
 
     // New or Change
-    for (const tableName of srcTables) {
-      let srcDDL = await src.getTableDDL(srcDbName, tableName);
-      let destDDL = await dest.getTableDDL(targetDbName, tableName);
+    const chunkArray = <T>(arr: T[], size: number): T[][] =>
+      arr.length > 0 ? [arr.slice(0, size), ...chunkArray(arr.slice(size), size)] : [];
 
-      srcDDL = this._applyNormalization(srcDDL, destEnv);
-      destDDL = this._applyNormalization(destDDL, destEnv);
+    const tableChunks = chunkArray(srcTables, 10);
+    if (srcTables.length > 1000) {
+      this.logger.warn(`Comparing ${srcTables.length} tables in parallel chunks. Ensure DB connection pool can handle concurrent queries.`);
+    }
 
-      if (!destDDL) {
-        // New table - for now handled by Migrator if we just send the diff
-        // But for parity, we should probably represent this as a CREATE statement or TableDiff
-        // In our current design, ITableDiff represents ALTERS.
-        // Let's use a special "status" or just empty destDDL for CREATE?
-        // Actually, let's just use compareTables.
-      }
+    for (const chunk of tableChunks) {
+      await Promise.allSettled(chunk.map(async (tableName) => {
+        try {
+          let srcDDL = await src.getTableDDL(srcDbName, tableName);
+          let destDDL = await dest.getTableDDL(targetDbName, tableName);
 
-      const tableDiff = this.compareTables(srcDDL, destDDL);
-      if (tableDiff.hasChanges) {
-        diff.tables[tableName] = tableDiff;
-        diff.summary.tablesChanged++;
-        diff.summary.totalChanges += tableDiff.operations.length;
-      }
+          srcDDL = this._applyNormalization(srcDDL, destEnv);
+          destDDL = this._applyNormalization(destDDL, destEnv);
+
+          const tableDiff = this.compareTables(srcDDL, destDDL);
+          if (tableDiff.hasChanges) {
+            diff.tables[tableName] = tableDiff;
+            diff.summary.tablesChanged++;
+            diff.summary.totalChanges += tableDiff.operations.length;
+          }
+        } catch (e) {
+          this.logger.error(`Error comparing table ${tableName}:`, e);
+        }
+      }));
     }
 
     // Dropped
@@ -616,6 +645,7 @@ export class ComparatorService {
     specificName?: string,
     srcDialect: string = 'mysql',
     destDialect: string = 'mysql',
+    strictColumnOrder: boolean = false,
   ): Promise<any[]> {
     const storageType = ddlType.toUpperCase(); // 'TABLES', 'PROCEDURES', etc.
 
@@ -683,12 +713,12 @@ export class ComparatorService {
           }
         }
 
-        const hasChange = metaChanged || this._hasRealChange(srcDDL, destDDL, storageType);
+        const hasChange = metaChanged || this._hasRealChange(srcDDL, destDDL, storageType, strictColumnOrder);
 
         if (hasChange) {
           status = 'different';
           if (storageType === 'TABLES') {
-            const tableDiff = this.compareTables(srcDDL, destDDL, srcDialect, destDialect);
+            const tableDiff = this.compareTables(srcDDL, destDDL, srcDialect, destDialect, strictColumnOrder);
             alterStatements = this.migrator.generateTableAlterSQL(tableDiff);
             const colCount = tableDiff.operations.filter(op => op.target === 'COLUMN').length;
             const idxCount = tableDiff.operations.filter(op => op.target === 'INDEX').length;
@@ -982,7 +1012,7 @@ export class ComparatorService {
   /**
    * Filter false-positive changes (Legacy parity)
    */
-  private _hasRealChange(src: string, dest: string, type: string): boolean {
+  private _hasRealChange(src: string, dest: string, type: string, strictColumnOrder: boolean = false): boolean {
     if (type === 'TABLES' || type === 'TABLE') {
       const cleanFn = (text: string) => {
         let cleaned = this._unescapeHtml(text);
@@ -992,7 +1022,68 @@ export class ComparatorService {
         cleaned = this._applyNormalization(cleaned);
         // Remove CHARACTER SET and COLLATE to avoid environmental noise
         cleaned = cleaned.replace(/CHARACTER SET [a-zA-Z0-9_]+/gi, '').replace(/COLLATE [a-zA-Z0-9_]+/gi, '');
-        return cleaned.replace(/[`'"]/g, '').replace(/\s+/g, '').toLowerCase();
+        // Remove USING BTREE, ROW_FORMAT, and AUTO_INCREMENT to avoid environmental noise
+        cleaned = cleaned.replace(/\busing\s+btree\b/gi, '');
+        cleaned = cleaned.replace(/\brow_format\s*=\s*[a-zA-Z0-9_]+\b/gi, '');
+        cleaned = cleaned.replace(/\bauto_increment\s*=\s*[0-9]+\b/gi, '');
+        cleaned = cleaned.replace(/[`'"]/g, '').toLowerCase();
+
+        // Sort columns and indexes/keys alphabetically to ignore order/position changes
+        if (!strictColumnOrder) {
+          try {
+            const firstParen = cleaned.indexOf('(');
+            const lastParen = cleaned.lastIndexOf(')');
+            if (firstParen !== -1 && lastParen !== -1) {
+              const header = cleaned.substring(0, firstParen).replace(/\s+/g, '');
+              const footer = cleaned.substring(lastParen + 1).replace(/\s+/g, '');
+              const body = cleaned.substring(firstParen + 1, lastParen);
+              
+              const parts: string[] = [];
+              let current = '';
+              let depth = 0;
+              for (let i = 0; i < body.length; i++) {
+                const char = body[i];
+                if (char === '(') depth++;
+                if (char === ')') depth--;
+                if (char === ',' && depth === 0) {
+                  parts.push(current.trim());
+                  current = '';
+                } else {
+                  current += char;
+                }
+              }
+              if (current.trim()) parts.push(current.trim());
+
+              const cols: string[] = [];
+              const keys: string[] = [];
+              for (const part of parts) {
+                const cleanedPart = part.replace(/\s+/g, '');
+                if (!cleanedPart) continue;
+                if (
+                  cleanedPart.startsWith('primarykey') ||
+                  cleanedPart.startsWith('key') ||
+                  cleanedPart.startsWith('index') ||
+                  cleanedPart.startsWith('unique') ||
+                  cleanedPart.startsWith('constraint') ||
+                  cleanedPart.startsWith('foreignkey')
+                ) {
+                  keys.push(cleanedPart);
+                } else {
+                  cols.push(cleanedPart);
+                }
+              }
+
+              cols.sort();
+              keys.sort();
+
+              return `${header}(${cols.join(',')};${keys.join(',')})${footer}`;
+            }
+          } catch (e) {
+            // Fallback to simple space collapse if anything fails
+          }
+        }
+
+        return cleaned.replace(/\s+/g, '');
       };
 
       const ns = cleanFn(src);
@@ -1007,7 +1098,7 @@ export class ComparatorService {
         fs.appendFileSync('/Volumes/FlexibleWorkplace/The-Andb/mismatch.txt', logContent);
       } catch(e) {}
 
-      const diff = this.compareTables(src, dest);
+      const diff = this.compareTables(src, dest, undefined, undefined, strictColumnOrder);
       return diff.hasChanges;
     }
 

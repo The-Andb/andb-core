@@ -1,6 +1,6 @@
 {
   "name": "@the-andb/core",
-  "version": "4.0.4",
+  "version": "4.1.1",
   "description": "TheAndb - Keep Going. Keep Syncing.",
   "author": "TheAndb (ph4n4n)",
   "publishConfig": {
@@ -19,6 +19,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:memory": "clinic doctor -- node -r ts-node/register scripts/memory-test.ts",
     "cli": "ts-node src/cli/main.ts",
     "export:dev:fn": "andb export -f DEV",
     "export:dev:sp": "andb export -p DEV",
@@ -84,6 +85,7 @@
     "@types/supertest": "^6.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
+    "clinic": "^13.0.0",
     "eslint": "^8.42.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-prettier": "^5.0.0",
